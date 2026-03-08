@@ -9,6 +9,22 @@
 
 ## Install
 
+- npm:
+
+```shell
+npm install -g @loongphy/codex-auth
+```
+
+  You can also run it without a global install:
+
+```shell
+npx @loongphy/codex-auth list
+```
+
+  The npm package uses npm's platform-aware install model: the root package depends on platform packages via `optionalDependencies`, and npm installs the matching binary package for your current OS/CPU.
+  Supported npm targets: Linux x64, macOS ARM64, Windows x64.
+  CI publishing uses npm Trusted Publishing via GitHub Actions OIDC.
+
 - Linux/macOS/WSL2:
 
 ```shell

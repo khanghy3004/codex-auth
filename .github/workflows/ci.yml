@@ -36,40 +36,74 @@ jobs:
           zig version
           zig build test
 
-      - name: Build release binary
+      - name: Build native binary
         run: zig build -Doptimize=ReleaseSafe
 
-      - name: Package artifact (Linux/macOS)
-        if: runner.os != 'Windows'
+  release-assets:
+    name: Build Release Assets (${{ matrix.id }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x64
+            zig_target: x86_64-linux-gnu
+            binary_name: codex-auth
+            archive_name: codex-auth-Linux-X64.tar.gz
+          - id: darwin-arm64
+            zig_target: aarch64-macos-none
+            binary_name: codex-auth
+            archive_name: codex-auth-macOS-ARM64.tar.gz
+          - id: win32-x64
+            zig_target: x86_64-windows-gnu
+            binary_name: codex-auth.exe
+            archive_name: codex-auth-Windows-X64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check versions
+        run: node scripts/npm/check-versions.mjs ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+
+      - name: Build binary
+        run: zig build -Dtarget=${{ matrix.zig_target }} -Doptimize=ReleaseSafe
+
+      - name: Stage artifact bundle
         shell: bash
         run: |
-          ASSET_NAME="codex-auth-${{ runner.os }}-${{ runner.arch }}.tar.gz"
-          mkdir -p dist
-          cp zig-out/bin/codex-auth dist/codex-auth
-          tar -czf "${ASSET_NAME}" -C dist codex-auth
-          echo "ASSET_NAME=${ASSET_NAME}" >> "$GITHUB_ENV"
+          mkdir -p "artifacts/${{ matrix.id }}/binary"
+          cp "zig-out/bin/${{ matrix.binary_name }}" "artifacts/${{ matrix.id }}/binary/${{ matrix.binary_name }}"
+          if [[ "${{ matrix.archive_name }}" == *.zip ]]; then
+            (
+              cd "artifacts/${{ matrix.id }}/binary"
+              zip -q "../${{ matrix.archive_name }}" "${{ matrix.binary_name }}"
+            )
+          else
+            tar -czf "artifacts/${{ matrix.id }}/${{ matrix.archive_name }}" -C "artifacts/${{ matrix.id }}/binary" "${{ matrix.binary_name }}"
+          fi
 
-      - name: Package artifact (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $assetName = "codex-auth-${{ runner.os }}-${{ runner.arch }}.zip"
-          New-Item -ItemType Directory -Path dist -Force | Out-Null
-          Copy-Item zig-out/bin/codex-auth.exe dist/codex-auth.exe
-          Compress-Archive -Path dist/codex-auth.exe -DestinationPath $assetName -Force
-          "ASSET_NAME=$assetName" >> $env:GITHUB_ENV
-
-      - name: Upload artifact
+      - name: Upload artifact bundle
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ASSET_NAME }}
-          path: ${{ env.ASSET_NAME }}
+          name: bundle-${{ matrix.id }}
+          path: artifacts
 
   release:
     name: Publish Release
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-    needs: build-test
+    needs: [build-test, release-assets]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -151,4 +185,78 @@ jobs:
         with:
           draft: true
           body_path: release-notes.md
-          files: release-assets/*
+          files: |
+            release-assets/*/*.tar.gz
+            release-assets/*/*.zip
+
+  publish-npm:
+    name: Publish npm packages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [build-test, release-assets]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Check versions
+        run: node scripts/npm/check-versions.mjs ${{ github.ref_name }}
+
+      - name: Stage npm packages
+        run: node scripts/npm/stage-packages.mjs --artifacts-dir artifacts --output-dir dist/npm
+
+      - name: Read package version
+        shell: bash
+        run: echo "PACKAGE_VERSION=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_ENV"
+
+      - name: Pack root package
+        run: npm pack ./dist/npm/root --pack-destination ./dist/packed
+
+      - name: Pack host platform package
+        run: npm pack ./dist/npm/codex-auth-linux-x64 --pack-destination ./dist/packed
+
+      - name: Smoke install packed tarballs
+        shell: bash
+        run: |
+          mkdir -p smoke
+          cd smoke
+          npm init -y
+          npm install "../dist/packed/loongphy-codex-auth-linux-x64-${PACKAGE_VERSION}.tgz" "../dist/packed/loongphy-codex-auth-${PACKAGE_VERSION}.tgz"
+          ./node_modules/.bin/codex-auth --version
+
+      - name: Set npm dist-tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "NPM_DIST_TAG=next" >> "$GITHUB_ENV"
+          else
+            echo "NPM_DIST_TAG=latest" >> "$GITHUB_ENV"
+          fi
+
+      - name: Publish platform packages
+        shell: bash
+        run: |
+          for dir in \
+            codex-auth-linux-x64 \
+            codex-auth-darwin-arm64 \
+            codex-auth-win32-x64
+          do
+            npm publish "./dist/npm/${dir}" --access public --tag "${NPM_DIST_TAG}"
+          done
+
+      - name: Publish root package
+        run: npm publish ./dist/npm/root --access public --tag ${{ env.NPM_DIST_TAG }}

@@ -2,6 +2,23 @@
 
 This document describes how `codex-auth` stores accounts, synchronizes auth files, and refreshes metadata. The tool never calls external APIs; it reads only local files under `~/.codex` (or `CODEX_HOME`).
 
+## Packaging and Release
+
+- The CLI binary version is defined in `src/version.zig` and must match the npm package version and any release tag version without the leading `v`.
+- npm distribution uses a root package plus three platform packages:
+  - Root package: `@loongphy/codex-auth`
+  - Platform packages:
+    - `@loongphy/codex-auth-linux-x64`
+    - `@loongphy/codex-auth-darwin-arm64`
+    - `@loongphy/codex-auth-win32-x64`
+- The root npm package exposes the `codex-auth` command and depends on platform packages through `optionalDependencies`.
+- Each platform package declares `os` and `cpu`, so npm installs only the matching binary package for the current OS/CPU.
+- Tag pushes matching `v*` continue to create GitHub Release assets and also publish npm packages automatically.
+- npm publishing uses Trusted Publishing from GitHub Actions, so the publish job must run on a GitHub-hosted runner with `id-token: write`.
+- Stable tags such as `v0.1.3` publish to npm dist-tag `latest`.
+- Prerelease tags such as `v0.2.0-rc.1` publish to npm dist-tag `next`.
+- GitHub Release assets and npm packages currently target Linux x64, macOS ARM64, and Windows x64.
+
 ## File Layout
 
 - `~/.codex/auth.json`
