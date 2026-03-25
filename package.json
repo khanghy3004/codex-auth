@@ -1,34 +1,30 @@
 {
-  "name": "@loongphy/codex-auth",
-  "version": "0.2.2-alpha.4",
-  "description": "CLI for switching Codex accounts",
+  "name": "@khanghy3004/codex-auth",
+  "version": "0.3.0",
+  "description": "CLI for switching Codex accounts with built-in rotating proxy support",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Loongphy/codex-auth"
+    "url": "https://github.com/khanghy3004/codex-auth"
   },
-  "homepage": "https://github.com/Loongphy/codex-auth",
+  "homepage": "https://github.com/khanghy3004/codex-auth",
   "bugs": {
-    "url": "https://github.com/Loongphy/codex-auth/issues"
+    "url": "https://github.com/khanghy3004/codex-auth/issues"
   },
   "bin": {
     "codex-auth": "bin/codex-auth.js"
   },
   "files": [
     "bin/",
+    "dist/",
     "LICENSE",
     "README.md"
   ],
-  "optionalDependencies": {
-    "@loongphy/codex-auth-linux-x64": "0.2.2-alpha.4",
-    "@loongphy/codex-auth-darwin-x64": "0.2.2-alpha.4",
-    "@loongphy/codex-auth-darwin-arm64": "0.2.2-alpha.4",
-    "@loongphy/codex-auth-win32-x64": "0.2.2-alpha.4"
-  },
   "scripts": {
     "check:versions": "node scripts/npm/check-versions.mjs",
     "stage:npm": "node scripts/npm/stage-packages.mjs",
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "proxy": "node dist/src/proxy/index.js"
   },
   "dependencies": {
