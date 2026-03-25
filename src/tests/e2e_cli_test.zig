@@ -53,7 +53,7 @@ fn buildCliBinary(allocator: std.mem.Allocator, project_root: []const u8) !void 
 }
 
 fn builtCliPathAlloc(allocator: std.mem.Allocator, project_root: []const u8) ![]u8 {
-    const exe_name = if (builtin.os.tag == .windows) "codex-auth.exe" else "codex-auth";
+    const exe_name = if (builtin.os.tag == .windows) "codex-auth-proxy.exe" else "codex-auth-proxy";
     return std.fs.path.join(allocator, &[_][]const u8{ project_root, "zig-out", "bin", exe_name });
 }
 
@@ -792,7 +792,7 @@ test "Scenario: Given default api usage when rendering help then the api enable 
     defer gpa.free(result.stderr);
 
     try expectSuccess(result);
-    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "codex-auth") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "codex-auth-proxy") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Usage API: ON (api)") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "`config api enable` may trigger OpenAI account restrictions or suspension in some environments.") != null);
     try std.testing.expectEqualStrings("", result.stderr);

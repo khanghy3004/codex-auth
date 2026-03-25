@@ -7,7 +7,7 @@ Fix the `remove` command workflow so it is easier to use in query-based and pipe
 ## Scope
 
 1. After `handleRemove` completes successfully, print `Removed N account(s): ...`.
-2. Support `codex-auth remove <query>` for alias/email fragment matching.
+2. Support `codex-auth-proxy remove <query>` for alias/email fragment matching.
 3. If a query matches multiple accounts, show a confirmation prompt listing the matched emails and only delete on `y`/`Y`.
 4. In pipe mode, when `stdin` is not a TTY, skip the interactive `/dev/tty` UI and use the numbered remove selector directly.
 5. Update documentation and tests for the new behavior.
@@ -56,10 +56,10 @@ Fix the `remove` command workflow so it is easier to use in query-based and pipe
 
 ## Progress Log
 
-- 2026-03-20: Worktree created at `/tmp/codex-auth--fix-remove-command` on branch `fix/remove-command`.
+- 2026-03-20: Worktree created at `/tmp/codex-auth-proxy--fix-remove-command` on branch `fix/remove-command`.
 - 2026-03-20: Created `plans/2026-03-20-remove-command.md` and added a temporary active-plan note to `AGENTS.md`.
 - 2026-03-20: Requirements confirmed:
-  - support `codex-auth remove <query>`
+  - support `codex-auth-proxy remove <query>`
   - no `--email` flag
   - query matches alias or email
   - multi-match query path asks for explicit delete confirmation

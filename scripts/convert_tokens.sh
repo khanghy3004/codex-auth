@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert ~/.cli-proxy-api/token*.json into codex-auth auth.json files."""
+"""Convert ~/.cli-proxy-api/token*.json into codex-auth-proxy auth.json files."""
 
 import json
 import glob

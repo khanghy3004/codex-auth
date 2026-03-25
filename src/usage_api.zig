@@ -240,7 +240,7 @@ fn runCurlUsageCommand(
             "-H",
             account_header,
             "-H",
-            "User-Agent: codex-auth",
+            "User-Agent: codex-auth-proxy",
             "-H",
             "Accept-Encoding: identity",
             endpoint,
@@ -279,7 +279,7 @@ fn runPowerShellUsageCommand(
 
     const script = try std.fmt.allocPrint(
         allocator,
-        "$headers = @{{ Authorization = 'Bearer {s}'; 'ChatGPT-Account-Id' = '{s}'; 'User-Agent' = 'codex-auth'; 'Accept-Encoding' = 'identity' }}; $status = 0; $body = ''; try {{ $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec {s} -Headers $headers -Uri '{s}'; $status = [int]$response.StatusCode; $body = [string]$response.Content }} catch {{ if ($_.Exception.Response) {{ $status = [int]$_.Exception.Response.StatusCode.value__; $stream = $_.Exception.Response.GetResponseStream(); if ($stream) {{ $reader = New-Object System.IO.StreamReader($stream); try {{ $body = $reader.ReadToEnd() }} finally {{ $reader.Dispose() }} }} }} }}; [Console]::Out.Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($body))); [Console]::Out.Write(\"`n\"); [Console]::Out.Write($status)",
+        "$headers = @{{ Authorization = 'Bearer {s}'; 'ChatGPT-Account-Id' = '{s}'; 'User-Agent' = 'codex-auth-proxy'; 'Accept-Encoding' = 'identity' }}; $status = 0; $body = ''; try {{ $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec {s} -Headers $headers -Uri '{s}'; $status = [int]$response.StatusCode; $body = [string]$response.Content }} catch {{ if ($_.Exception.Response) {{ $status = [int]$_.Exception.Response.StatusCode.value__; $stream = $_.Exception.Response.GetResponseStream(); if ($stream) {{ $reader = New-Object System.IO.StreamReader($stream); try {{ $body = $reader.ReadToEnd() }} finally {{ $reader.Dispose() }} }} }} }}; [Console]::Out.Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($body))); [Console]::Out.Write(\"`n\"); [Console]::Out.Write($status)",
         .{ escaped_token, escaped_account_id, request_timeout_secs, escaped_endpoint },
     );
     defer allocator.free(script);

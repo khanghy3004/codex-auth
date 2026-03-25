@@ -38,7 +38,7 @@ function parseArgs(argv) {
 function writeRootPackage(outputDir, rootPackage) {
   const dir = path.join(outputDir, rootPublishDirName);
   ensureDir(path.join(dir, "bin"));
-  copyFile(rootBinPath, path.join(dir, "bin", "codex-auth.js"), 0o755);
+  copyFile(rootBinPath, path.join(dir, "bin", "codex-auth-proxy.js"), 0o755);
   copyFile(rootReadmePath, path.join(dir, "README.md"));
   copyFile(rootLicensePath, path.join(dir, "LICENSE"));
   writeJson(path.join(dir, "package.json"), rootPackage);

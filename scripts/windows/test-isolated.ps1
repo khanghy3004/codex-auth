@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if (-not $ExePath) {
-  $ExePath = Join-Path $TestRoot 'codex-auth-win32-x64\codex-auth.exe'
+  $ExePath = Join-Path $TestRoot 'codex-auth-proxy-win32-x64\codex-auth-proxy.exe'
 }
 
 $CodexHome = Join-Path $TestRoot '.codex'
@@ -168,7 +168,7 @@ function Get-TaskSummary {
 }
 
 function Get-WindowsWrapper {
-  $wrapperPath = Join-Path $CodexHome 'codex-auth-autoswitch.cmd'
+  $wrapperPath = Join-Path $CodexHome 'codex-auth-proxy-autoswitch.cmd'
   return [pscustomobject]@{
     exists = (Test-Path $wrapperPath)
     path = $wrapperPath

@@ -298,7 +298,7 @@ pub fn writeHelp(
     api_cfg: *const registry.ApiConfig,
 ) !void {
     if (use_color) try out.writeAll(ansi.bold);
-    try out.writeAll("codex-auth");
+    try out.writeAll("codex-auth-proxy");
     if (use_color) try out.writeAll(ansi.reset);
     try out.writeAll(" ");
     if (use_color) try out.writeAll(ansi.dim);
@@ -436,7 +436,7 @@ pub fn printVersion() !void {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
-    try out.print("codex-auth {s}\n", .{version.app_version});
+    try out.print("codex-auth-proxy {s}\n", .{version.app_version});
     try out.flush();
 }
 
@@ -501,7 +501,7 @@ pub fn writeImportReport(
 
 pub fn warnDeprecatedLoginAlias(opts: LoginOptions) void {
     if (opts.invocation != .add_alias) return;
-    writeDeprecatedLoginAliasWarning("codex-auth login", stderrColorEnabled()) catch {};
+    writeDeprecatedLoginAliasWarning("codex-auth-proxy login", stderrColorEnabled()) catch {};
 }
 
 fn writeDeprecatedLoginAliasWarning(replacement: []const u8, use_color: bool) !void {
@@ -542,7 +542,7 @@ pub fn printRemoveRequiresTtyError() !void {
     try writeErrorPrefixTo(out, use_color);
     try out.writeAll(" interactive remove requires a TTY.\n");
     try writeHintPrefixTo(out, use_color);
-    try out.writeAll(" Use `codex-auth remove <query>` or `codex-auth remove --all` instead.\n");
+    try out.writeAll(" Use `codex-auth-proxy remove <query>` or `codex-auth-proxy remove --all` instead.\n");
     try out.flush();
 }
 

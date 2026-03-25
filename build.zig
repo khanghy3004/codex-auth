@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const exe = b.addExecutable(.{
-        .name = "codex-auth",
+        .name = "codex-auth-proxy",
         .root_module = main_module,
     });
     b.installArtifact(exe);
@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         });
         const auto_exe = b.addExecutable(.{
-            .name = "codex-auth-auto",
+            .name = "codex-auth-proxy-auto",
             .root_module = auto_module,
         });
         auto_exe.subsystem = .Windows;
@@ -36,7 +36,7 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-    const run_step = b.step("run", "Run codex-auth");
+    const run_step = b.step("run", "Run codex-auth-proxy");
     run_step.dependOn(&run_cmd.step);
 
     const test_module = b.createModule(.{
@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const tests = b.addTest(.{
-        .name = "codex-auth-test",
+        .name = "codex-auth-proxy-test",
         .root_module = test_module,
     });
     const test_step = b.step("test", "Run tests");

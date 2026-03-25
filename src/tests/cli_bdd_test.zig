@@ -11,7 +11,7 @@ fn isHelp(cmd: cli.Command) bool {
 
 test "Scenario: Given add alias when parsing then legacy invocation is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "add" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "add" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -25,7 +25,7 @@ test "Scenario: Given add alias when parsing then legacy invocation is preserved
 
 test "Scenario: Given import path and alias when parsing then import options are preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "import", "/tmp/auth.json", "--alias", "personal" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "import", "/tmp/auth.json", "--alias", "personal" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -43,7 +43,7 @@ test "Scenario: Given import path and alias when parsing then import options are
 
 test "Scenario: Given import purge without path when parsing then purge mode is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "import", "--purge" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "import", "--purge" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -59,7 +59,7 @@ test "Scenario: Given import purge without path when parsing then purge mode is 
 
 test "Scenario: Given import cpa without path when parsing then cpa mode is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "import", "--cpa" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "import", "--cpa" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -76,7 +76,7 @@ test "Scenario: Given import cpa without path when parsing then cpa mode is pres
 
 test "Scenario: Given import cpa with purge when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "import", "--cpa", "--purge" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "import", "--cpa", "--purge" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -85,7 +85,7 @@ test "Scenario: Given import cpa with purge when parsing then help command is re
 
 test "Scenario: Given import unknown short purge flag when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "import", "-P", "/tmp/auth.json" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "import", "-P", "/tmp/auth.json" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -94,7 +94,7 @@ test "Scenario: Given import unknown short purge flag when parsing then help com
 
 test "Scenario: Given import alias without path when parsing then help command is returned without leaks" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "import", "--alias", "personal" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "import", "--alias", "personal" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -103,7 +103,7 @@ test "Scenario: Given import alias without path when parsing then help command i
 
 test "Scenario: Given list with extra args when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "list", "unexpected" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "list", "unexpected" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -112,7 +112,7 @@ test "Scenario: Given list with extra args when parsing then help command is ret
 
 test "Scenario: Given login with removed no-login flag when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "login", "--no-login" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "login", "--no-login" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -121,7 +121,7 @@ test "Scenario: Given login with removed no-login flag when parsing then help co
 
 test "Scenario: Given add alias with removed no-login flag when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "add", "--no-login" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "add", "--no-login" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -130,7 +130,7 @@ test "Scenario: Given add alias with removed no-login flag when parsing then hel
 
 test "Scenario: Given login with unknown flag when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "login", "--bad-flag" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "login", "--bad-flag" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -155,7 +155,7 @@ test "Scenario: Given help when rendering then login and compatibility notes are
     try std.testing.expect(std.mem.indexOf(u8, help, "Usage API: ON (api)") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "--cpa [<path>]") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "Warning: Usage refresh is currently using the ChatGPT usage API") == null);
-    try std.testing.expect(std.mem.indexOf(u8, help, "`codex-auth config api disable`") == null);
+    try std.testing.expect(std.mem.indexOf(u8, help, "`codex-auth-proxy config api disable`") == null);
     try std.testing.expect(std.mem.indexOf(u8, help, "`config api enable` may trigger OpenAI account restrictions or suspension in some environments.") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "login") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "add [--no-login]") == null);
@@ -228,7 +228,7 @@ test "Scenario: Given single-file skipped import report when rendering then summ
 
 test "Scenario: Given status when parsing then status command is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "status" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "status" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -240,7 +240,7 @@ test "Scenario: Given status when parsing then status command is preserved" {
 
 test "Scenario: Given config auto 5h threshold when parsing then threshold configuration is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "--5h", "12" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "--5h", "12" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -262,7 +262,7 @@ test "Scenario: Given config auto 5h threshold when parsing then threshold confi
 
 test "Scenario: Given config auto thresholds together when parsing then both window thresholds are preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "--5h", "12", "--weekly", "8" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "--5h", "12", "--weekly", "8" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -285,7 +285,7 @@ test "Scenario: Given config auto thresholds together when parsing then both win
 
 test "Scenario: Given config auto enable when parsing then auto action is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "enable" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "enable" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -303,7 +303,7 @@ test "Scenario: Given config auto enable when parsing then auto action is preser
 
 test "Scenario: Given config api enable when parsing then api action is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "api", "enable" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "api", "enable" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -318,7 +318,7 @@ test "Scenario: Given config api enable when parsing then api action is preserve
 
 test "Scenario: Given config api disable when parsing then api disable action is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "api", "disable" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "api", "disable" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -333,7 +333,7 @@ test "Scenario: Given config api disable when parsing then api disable action is
 
 test "Scenario: Given config auto action mixed with threshold flags when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "enable", "--5h", "12" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "enable", "--5h", "12" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -342,7 +342,7 @@ test "Scenario: Given config auto action mixed with threshold flags when parsing
 
 test "Scenario: Given config auto threshold percent out of range when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "--weekly", "0" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "--weekly", "0" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -351,7 +351,7 @@ test "Scenario: Given config auto threshold percent out of range when parsing th
 
 test "Scenario: Given config auto repeated threshold flag when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "--5h", "12", "--5h", "15" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "--5h", "12", "--5h", "15" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -360,7 +360,7 @@ test "Scenario: Given config auto repeated threshold flag when parsing then help
 
 test "Scenario: Given config auto threshold without value when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "--weekly" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "--weekly" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -369,7 +369,7 @@ test "Scenario: Given config auto threshold without value when parsing then help
 
 test "Scenario: Given config auto threshold command without flags when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -378,7 +378,7 @@ test "Scenario: Given config auto threshold command without flags when parsing t
 
 test "Scenario: Given config auto threshold with weekly only when parsing then single-window config is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "auto", "--weekly", "9" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "auto", "--weekly", "9" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -400,7 +400,7 @@ test "Scenario: Given config auto threshold with weekly only when parsing then s
 
 test "Scenario: Given removed top-level auto command when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "auto", "enable" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "auto", "enable" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -409,7 +409,7 @@ test "Scenario: Given removed top-level auto command when parsing then help comm
 
 test "Scenario: Given config api unknown action when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "config", "api", "status" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "config", "api", "status" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -418,7 +418,7 @@ test "Scenario: Given config api unknown action when parsing then help command i
 
 test "Scenario: Given status with extra args when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "status", "extra" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "status", "extra" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -427,7 +427,7 @@ test "Scenario: Given status with extra args when parsing then help command is r
 
 test "Scenario: Given migrate when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "migrate" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "migrate" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -436,7 +436,7 @@ test "Scenario: Given migrate when parsing then help command is returned" {
 
 test "Scenario: Given clean when parsing then clean command is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "clean" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "clean" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -448,7 +448,7 @@ test "Scenario: Given clean when parsing then clean command is preserved" {
 
 test "Scenario: Given daemon watch when parsing then daemon command is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "daemon", "--watch" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "daemon", "--watch" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -460,7 +460,7 @@ test "Scenario: Given daemon watch when parsing then daemon command is preserved
 
 test "Scenario: Given daemon once when parsing then one-shot daemon command is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "daemon", "--once" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "daemon", "--once" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -475,12 +475,12 @@ test "Scenario: Given deprecated add alias warning when rendering then colorized
     var aw: std.Io.Writer.Allocating = .init(gpa);
     defer aw.deinit();
 
-    try cli.writeDeprecatedLoginAliasWarningTo(&aw.writer, "codex-auth login", true);
+    try cli.writeDeprecatedLoginAliasWarningTo(&aw.writer, "codex-auth-proxy login", true);
 
     const warning = aw.written();
     try std.testing.expect(std.mem.indexOf(u8, warning, "\x1b[1;31mwarning:\x1b[0m") != null);
     try std.testing.expect(std.mem.indexOf(u8, warning, "\x1b[1m`add`\x1b[0m") != null);
-    try std.testing.expect(std.mem.indexOf(u8, warning, "\x1b[1;32m`codex-auth login`\x1b[0m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, warning, "\x1b[1;32m`codex-auth-proxy login`\x1b[0m") != null);
 }
 
 test "Scenario: Given codex login access denied when rendering then plain English retry hint is included" {
@@ -510,7 +510,7 @@ test "Scenario: Given codex login client missing when rendering then detection h
 
 test "Scenario: Given switch with positional query when parsing then non-interactive target is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "switch", "user@example.com" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "switch", "user@example.com" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -525,7 +525,7 @@ test "Scenario: Given switch with positional query when parsing then non-interac
 
 test "Scenario: Given switch with duplicate target when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "switch", "a@example.com", "b@example.com" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "switch", "a@example.com", "b@example.com" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -534,7 +534,7 @@ test "Scenario: Given switch with duplicate target when parsing then help comman
 
 test "Scenario: Given switch with unexpected flag when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "switch", "--email", "a@example.com" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "switch", "--email", "a@example.com" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -543,7 +543,7 @@ test "Scenario: Given switch with unexpected flag when parsing then help command
 
 test "Scenario: Given remove with positional query when parsing then query mode is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "remove", "user@example.com" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "remove", "user@example.com" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -559,7 +559,7 @@ test "Scenario: Given remove with positional query when parsing then query mode 
 
 test "Scenario: Given remove with all flag when parsing then all mode is preserved" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "remove", "--all" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "remove", "--all" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -574,7 +574,7 @@ test "Scenario: Given remove with all flag when parsing then all mode is preserv
 
 test "Scenario: Given remove with duplicate targets when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "remove", "a@example.com", "b@example.com" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "remove", "a@example.com", "b@example.com" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -583,7 +583,7 @@ test "Scenario: Given remove with duplicate targets when parsing then help comma
 
 test "Scenario: Given remove with unexpected flag when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "remove", "--email" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "remove", "--email" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 
@@ -592,7 +592,7 @@ test "Scenario: Given remove with unexpected flag when parsing then help command
 
 test "Scenario: Given remove with all and query when parsing then help command is returned" {
     const gpa = std.testing.allocator;
-    const args = [_][:0]const u8{ "codex-auth", "remove", "--all", "a@example.com" };
+    const args = [_][:0]const u8{ "codex-auth-proxy", "remove", "--all", "a@example.com" };
     var cmd = try cli.parseArgs(gpa, &args);
     defer cli.freeCommand(gpa, &cmd);
 

@@ -10,11 +10,11 @@ const sessions = @import("sessions.zig");
 const usage_api = @import("usage_api.zig");
 const version = @import("version.zig");
 
-const linux_service_name = "codex-auth-autoswitch.service";
-const linux_timer_name = "codex-auth-autoswitch.timer";
-const mac_label = "com.loongphy.codex-auth.auto";
+const linux_service_name = "codex-auth-proxy-autoswitch.service";
+const linux_timer_name = "codex-auth-proxy-autoswitch.timer";
+const mac_label = "com.loongphy.codex-auth-proxy.auto";
 const windows_task_name = "CodexAuthAutoSwitch";
-const windows_helper_name = "codex-auth-auto.exe";
+const windows_helper_name = "codex-auth-proxy-auto.exe";
 const windows_task_trigger_kind = "LogonTrigger";
 const windows_task_restart_count = "999";
 const windows_task_restart_interval_xml = "PT1M";
@@ -1711,7 +1711,7 @@ fn printAutoEnableUsageNote(api_enabled: bool) !void {
         try out.writeAll("auto-switch enabled; usage mode: api (default, most accurate for switching decisions)\n");
     } else {
         try out.writeAll("auto-switch enabled; usage mode: local-only (switching still works, but candidate validation is less accurate)\n");
-        try out.writeAll("Tip: run `codex-auth config api enable` for the most accurate switching decisions.\n");
+        try out.writeAll("Tip: run `codex-auth-proxy config api enable` for the most accurate switching decisions.\n");
     }
     try out.flush();
 }
@@ -1972,7 +1972,7 @@ pub fn linuxUnitText(allocator: std.mem.Allocator, self_exe: []const u8, codex_h
     defer allocator.free(escaped_version);
     return try std.fmt.allocPrint(
         allocator,
-        "[Unit]\nDescription=codex-auth auto-switch watcher\n\n[Service]\nType=simple\nRestart=always\nRestartSec=1\nEnvironment=\"{s}={s}\"\nExecStart={s}\n\n[Install]\nWantedBy=default.target\n",
+        "[Unit]\nDescription=codex-auth-proxy auto-switch watcher\n\n[Service]\nType=simple\nRestart=always\nRestartSec=1\nEnvironment=\"{s}={s}\"\nExecStart={s}\n\n[Install]\nWantedBy=default.target\n",
         .{
             service_version_env_name,
             escaped_version,

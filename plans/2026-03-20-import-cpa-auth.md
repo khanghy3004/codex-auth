@@ -5,10 +5,10 @@ description: Add CPA-format auth import support and drive the branch through the
 
 # Plan
 
-Implement CPA-format auth import for `codex-auth`, ship it behind `import --cpa`, and drive the branch from bootstrap through a green Draft PR with no unresolved actionable review threads.
+Implement CPA-format auth import for `codex-auth-proxy`, ship it behind `import --cpa`, and drive the branch from bootstrap through a green Draft PR with no unresolved actionable review threads.
 
 ## Requirements
-- Add `codex-auth import --cpa [<path>]`.
+- Add `codex-auth-proxy import --cpa [<path>]`.
 - In CPA mode, allow the path to be omitted and default the source to `~/.cli-proxy-api`.
 - For CPA directory imports, scan all direct child `.json` files only, non-recursively, in sorted filename order.
 - Treat each CPA file as the flat token JSON shape implied by `scripts/convert_tokens.sh`.

@@ -2236,7 +2236,7 @@ fn detectSchemaVersion(root_obj: std.json.ObjectMap) u32 {
 fn logUnsupportedRegistryVersion(version_value: u32) void {
     if (builtin.is_test) return;
     std.log.err(
-        "registry schema_version {d} is newer than this codex-auth binary supports (max {d}); upgrade codex-auth",
+        "registry schema_version {d} is newer than this codex-auth-proxy binary supports (max {d}); upgrade codex-auth-proxy",
         .{ version_value, current_schema_version },
     );
 }
@@ -2282,7 +2282,7 @@ pub fn loadRegistry(allocator: std.mem.Allocator, codex_home: []const u8) !Regis
         3 => try loadCurrentRegistry(allocator, root_obj),
         else => {
             std.log.err(
-                "registry schema_version {d} is older than the minimum supported {d}; use an intermediate codex-auth release or import --purge",
+                "registry schema_version {d} is older than the minimum supported {d}; use an intermediate codex-auth-proxy release or import --purge",
                 .{ schema_version, min_supported_schema_version },
             );
             return error.UnsupportedRegistryVersion;

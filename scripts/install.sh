@@ -3,13 +3,13 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Install codex-auth from GitHub Releases.
+Install codex-auth-proxy from GitHub Releases.
 
 Usage:
   ./scripts/install.sh [--repo <owner/repo>] [--version <tag|latest>] [--install-dir <dir>] [--no-add-to-path]
 
 Options:
-  --repo <owner/repo>  GitHub repo (default: loongphy/codex-auth)
+  --repo <owner/repo>  GitHub repo (default: loongphy/codex-auth-proxy)
   --version <value>    Release tag or 'latest' (default: latest)
   --install-dir <dir>  Install directory (default: $HOME/.local/bin)
   --add-to-path        Persist install dir to shell profile (default behavior)
@@ -20,7 +20,7 @@ EOF
 
 INSTALL_DIR="${HOME}/.local/bin"
 VERSION="latest"
-REPO="loongphy/codex-auth"
+REPO="loongphy/codex-auth-proxy"
 ADD_TO_PATH=1
 SHELL_NAME="$(basename "${SHELL:-}")"
 PROFILE_FILE=""
@@ -84,7 +84,7 @@ detect_asset() {
       ;;
   esac
 
-  echo "codex-auth-${os}-${arch}.${ext}"
+  echo "codex-auth-proxy-${os}-${arch}.${ext}"
 }
 
 normalize_path_entry() {
@@ -163,7 +163,7 @@ persist_path_to_profile() {
   if [[ "${SHELL_NAME}" == "fish" ]]; then
     {
       echo ""
-      echo "# Added by codex-auth installer"
+      echo "# Added by codex-auth-proxy installer"
       echo "if not contains -- \"${INSTALL_DIR}\" \$PATH"
       echo "    set -gx PATH \"${INSTALL_DIR}\" \$PATH"
       echo "end"
@@ -172,7 +172,7 @@ persist_path_to_profile() {
     path_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
     {
       echo ""
-      echo "# Added by codex-auth installer"
+      echo "# Added by codex-auth-proxy installer"
       echo "${path_line}"
     } >> "${profile}"
   fi
@@ -255,12 +255,12 @@ BIN_PATH=""
 case "${ASSET}" in
   *.tar.gz)
     tar -xzf "${TMP_DIR}/${ASSET}" -C "${TMP_DIR}"
-    BIN_PATH="${TMP_DIR}/codex-auth"
+    BIN_PATH="${TMP_DIR}/codex-auth-proxy"
     ;;
   *.zip)
     if command -v unzip >/dev/null 2>&1; then
       unzip -q "${TMP_DIR}/${ASSET}" -d "${TMP_DIR}"
-      BIN_PATH="${TMP_DIR}/codex-auth"
+      BIN_PATH="${TMP_DIR}/codex-auth-proxy"
     else
       echo "unzip is required to extract ${ASSET}" >&2
       exit 1
@@ -269,12 +269,12 @@ case "${ASSET}" in
 esac
 
 if [[ -z "${BIN_PATH}" || ! -f "${BIN_PATH}" ]]; then
-  echo "Downloaded archive does not contain codex-auth binary." >&2
+  echo "Downloaded archive does not contain codex-auth-proxy binary." >&2
   exit 1
 fi
 
 mkdir -p "${INSTALL_DIR}"
-DEST_BIN="${INSTALL_DIR}/codex-auth"
+DEST_BIN="${INSTALL_DIR}/codex-auth-proxy"
 
 if command -v install >/dev/null 2>&1; then
   install -m 0755 "${BIN_PATH}" "${DEST_BIN}"
@@ -283,7 +283,7 @@ else
   chmod 0755 "${DEST_BIN}"
 fi
 
-print_success "codex-auth installed successfully!"
+print_success "codex-auth-proxy installed successfully!"
 print_info "Path : ${DEST_BIN}"
 CURRENT_PATH_MISSING=0
 if path_contains_dir "${INSTALL_DIR}"; then
@@ -309,7 +309,7 @@ else
 fi
 
 if [[ "${CURRENT_PATH_MISSING}" -eq 1 ]]; then
-  print_warn "Use codex-auth immediately in this terminal with:"
+  print_warn "Use codex-auth-proxy immediately in this terminal with:"
   if [[ "${SHELL_NAME}" == "fish" ]]; then
     print_cmd "  set -gx PATH \"${INSTALL_DIR}\" \$PATH"
   else

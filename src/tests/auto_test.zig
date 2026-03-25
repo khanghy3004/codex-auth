@@ -1001,14 +1001,14 @@ test "Scenario: Given stale top candidates when daemon switches then it validate
 
 test "Scenario: Given linux service unit when rendering then it keeps a persistent daemon watcher alive" {
     const gpa = std.testing.allocator;
-    const unit = try auto.linuxUnitText(gpa, "/tmp/codex-auth", "/tmp/custom-codex-home");
+    const unit = try auto.linuxUnitText(gpa, "/tmp/codex-auth-proxy", "/tmp/custom-codex-home");
     defer gpa.free(unit);
 
-    try std.testing.expect(std.mem.indexOf(u8, unit, "Description=codex-auth auto-switch watcher") != null);
+    try std.testing.expect(std.mem.indexOf(u8, unit, "Description=codex-auth-proxy auto-switch watcher") != null);
     try std.testing.expect(std.mem.indexOf(u8, unit, "Type=simple") != null);
     try std.testing.expect(std.mem.indexOf(u8, unit, "Restart=always") != null);
     try std.testing.expect(std.mem.indexOf(u8, unit, "Environment=\"CODEX_AUTH_VERSION=") != null);
-    try std.testing.expect(std.mem.indexOf(u8, unit, "ExecStart=\"/tmp/codex-auth\" daemon --watch") != null);
+    try std.testing.expect(std.mem.indexOf(u8, unit, "ExecStart=\"/tmp/codex-auth-proxy\" daemon --watch") != null);
     try std.testing.expect(std.mem.indexOf(u8, unit, "[Install]") != null);
     try std.testing.expect(std.mem.indexOf(u8, unit, "WantedBy=default.target") != null);
 }
@@ -1018,31 +1018,31 @@ test "Scenario: Given a zig build run executable path when resolving the managed
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.makePath("zig-out/bin");
-    try tmp.dir.writeFile(.{ .sub_path = "zig-out/bin/codex-auth", .data = "" });
+    try tmp.dir.writeFile(.{ .sub_path = "zig-out/bin/codex-auth-proxy", .data = "" });
 
     const path = try auto.managedServiceSelfExePathFromDir(
         gpa,
         tmp.dir,
-        "/tmp/codex-auth/.zig-cache/o/abcd1234/codex-auth",
+        "/tmp/codex-auth-proxy/.zig-cache/o/abcd1234/codex-auth-proxy",
     );
     defer gpa.free(path);
 
-    const expected = try tmp.dir.realpathAlloc(gpa, "zig-out/bin/codex-auth");
+    const expected = try tmp.dir.realpathAlloc(gpa, "zig-out/bin/codex-auth-proxy");
     defer gpa.free(expected);
     try std.testing.expectEqualStrings(expected, path);
 }
 
 test "Scenario: Given a stable executable path when resolving the managed service binary then it keeps the original path" {
     const gpa = std.testing.allocator;
-    const path = try auto.managedServiceSelfExePath(gpa, "/usr/local/bin/codex-auth");
+    const path = try auto.managedServiceSelfExePath(gpa, "/usr/local/bin/codex-auth-proxy");
     defer gpa.free(path);
 
-    try std.testing.expectEqualStrings("/usr/local/bin/codex-auth", path);
+    try std.testing.expectEqualStrings("/usr/local/bin/codex-auth-proxy", path);
 }
 
 test "Scenario: Given mac plist when rendering then it includes version metadata and daemon args" {
     const gpa = std.testing.allocator;
-    const plist = try auto.macPlistText(gpa, "/tmp/codex-auth", "/tmp/custom-codex-home");
+    const plist = try auto.macPlistText(gpa, "/tmp/codex-auth-proxy", "/tmp/custom-codex-home");
     defer gpa.free(plist);
 
     try std.testing.expect(std.mem.indexOf(u8, plist, "<key>CODEX_AUTH_VERSION</key>") != null);
@@ -1051,11 +1051,11 @@ test "Scenario: Given mac plist when rendering then it includes version metadata
 
 test "Scenario: Given windows task action when rendering then it launches the helper directly without cmd" {
     const gpa = std.testing.allocator;
-    const action = try auto.windowsTaskAction(gpa, "C:\\Program Files\\codex-auth\\codex-auth-auto.exe");
+    const action = try auto.windowsTaskAction(gpa, "C:\\Program Files\\codex-auth-proxy\\codex-auth-proxy-auto.exe");
     defer gpa.free(action);
 
     try std.testing.expect(std.mem.indexOf(u8, action, "cmd.exe /D /C") == null);
-    try std.testing.expect(std.mem.indexOf(u8, action, "\"C:\\Program Files\\codex-auth\\codex-auth-auto.exe\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, action, "\"C:\\Program Files\\codex-auth-proxy\\codex-auth-proxy-auto.exe\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, action, "--service-version ") != null);
     try std.testing.expect(std.mem.indexOf(u8, action, "powershell.exe") == null);
     try std.testing.expect(action.len < 262);
@@ -1063,7 +1063,7 @@ test "Scenario: Given windows task action when rendering then it launches the he
 
 test "Scenario: Given windows task register script when rendering then it configures restart-on-failure" {
     const gpa = std.testing.allocator;
-    const script = try auto.windowsRegisterTaskScript(gpa, "C:\\Program Files\\codex-auth\\codex-auth-auto.exe");
+    const script = try auto.windowsRegisterTaskScript(gpa, "C:\\Program Files\\codex-auth-proxy\\codex-auth-proxy-auto.exe");
     defer gpa.free(script);
 
     try std.testing.expect(std.mem.indexOf(u8, script, "New-ScheduledTaskAction") != null);
@@ -1118,7 +1118,7 @@ test "Scenario: Given partial service install failure when enabling auto-switch 
         auto.enableWithServiceHooksAndPreflight(
             gpa,
             codex_home,
-            "/tmp/codex-auth",
+            "/tmp/codex-auth-proxy",
             installServiceWithPartialArtifact,
             uninstallPartialServiceArtifact,
             preflightSuccess,
@@ -1152,7 +1152,7 @@ test "Scenario: Given preflight failure when enabling auto-switch then registry 
         auto.enableWithServiceHooksAndPreflight(
             gpa,
             codex_home,
-            "/tmp/codex-auth",
+            "/tmp/codex-auth-proxy",
             installServiceWithPartialArtifact,
             uninstallPartialServiceArtifact,
             preflightFailure,
@@ -1196,8 +1196,8 @@ test "Scenario: Given an absolute managed unit path when deleting it then the fi
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    try tmp.dir.writeFile(.{ .sub_path = "codex-auth-autoswitch.timer", .data = "[Timer]\n" });
-    const timer_path = try tmp.dir.realpathAlloc(gpa, "codex-auth-autoswitch.timer");
+    try tmp.dir.writeFile(.{ .sub_path = "codex-auth-proxy-autoswitch.timer", .data = "[Timer]\n" });
+    const timer_path = try tmp.dir.realpathAlloc(gpa, "codex-auth-proxy-autoswitch.timer");
     defer gpa.free(timer_path);
 
     auto.deleteAbsoluteFileIfExists(timer_path);
@@ -1260,7 +1260,7 @@ test "Scenario: Given api usage mode when rendering status body then risk warnin
     const output = aw.written();
     try std.testing.expect(std.mem.indexOf(u8, output, "usage: api") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "Warning: Usage refresh is currently using the ChatGPT usage API") == null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "`codex-auth config api disable`") == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "`codex-auth-proxy config api disable`") == null);
 }
 
 test "Scenario: Given missing sessions dir when refreshing active usage then it is skipped without error" {

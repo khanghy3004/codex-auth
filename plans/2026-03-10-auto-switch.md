@@ -5,11 +5,11 @@ description: Add background account auto-switching with manual enable/disable/st
 
 # Plan
 
-Add a background auto-switch daemon to `codex-auth`. The feature must be off by default, manually controlled via `codex-auth auto enable|disable|status`, and shown in `help`. When enabled, the daemon silently switches away from the active account if its remaining quota falls below the configured thresholds.
+Add a background auto-switch daemon to `codex-auth-proxy`. The feature must be off by default, manually controlled via `codex-auth-proxy auto enable|disable|status`, and shown in `help`. When enabled, the daemon silently switches away from the active account if its remaining quota falls below the configured thresholds.
 
 ## Requirements
-- Add `codex-auth auto enable`, `codex-auth auto disable`, and `codex-auth auto status`.
-- Show the current auto-switch state in `codex-auth help`.
+- Add `codex-auth-proxy auto enable`, `codex-auth-proxy auto disable`, and `codex-auth-proxy auto status`.
+- Show the current auto-switch state in `codex-auth-proxy help`.
 - Keep auto-switch disabled by default for existing and new users.
 - Run a real background daemon instead of checking only during foreground commands.
 - Trigger a switch when the active account has:
@@ -43,7 +43,7 @@ Add a background auto-switch daemon to `codex-auth`. The feature must be off by 
   - `enabled: bool`
   - `session_tracker` metadata that records the last rollout file path/mtime and which account currently owns that rollout source
 - Keep registry v2 backward compatible by defaulting `auto_switch.enabled` to `false` and an empty tracker.
-- Add internal daemon-only command surface `codex-auth daemon --watch` for service managers.
+- Add internal daemon-only command surface `codex-auth-proxy daemon --watch` for service managers.
 
 ## Action items
 [ ] Add the plan file and keep implementation aligned with it.

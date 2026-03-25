@@ -1,11 +1,11 @@
 ---
 name: import-output
-description: Improve codex-auth import progress reporting, duplicate handling visibility, and stderr/stdout consistency
+description: Improve codex-auth-proxy import progress reporting, duplicate handling visibility, and stderr/stdout consistency
 ---
 
 # Plan
 
-Improve `codex-auth import` so import success is no longer silent, duplicate imports are clearly reported as updates, skipped files stay visible with friendly reasons, and stdout/stderr handling remains consistent with the rest of the CLI.
+Improve `codex-auth-proxy import` so import success is no longer silent, duplicate imports are clearly reported as updates, skipped files stay visible with friendly reasons, and stdout/stderr handling remains consistent with the rest of the CLI.
 
 ## Requirements
 - Create and work on branch `feat/import-output`.

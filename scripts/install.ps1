@@ -1,7 +1,7 @@
 param(
-  [string]$Repo = "loongphy/codex-auth",
+  [string]$Repo = "loongphy/codex-auth-proxy",
   [string]$Version = "latest",
-  [string]$InstallDir = "$env:LOCALAPPDATA\codex-auth\bin",
+  [string]$InstallDir = "$env:LOCALAPPDATA\codex-auth-proxy\bin",
   [switch]$AddToPath,
   [switch]$NoAddToPath
 )
@@ -58,7 +58,7 @@ function Detect-Asset {
     "Arm64" { "ARM64" }
     default { throw "Unsupported architecture: $arch" }
   }
-  return "codex-auth-Windows-$archText.zip"
+  return "codex-auth-proxy-Windows-$archText.zip"
 }
 
 if (-not (Get-Command Invoke-WebRequest -ErrorAction SilentlyContinue)) {
@@ -73,7 +73,7 @@ $DownloadUrl = if ($Version -eq "latest") {
   "https://github.com/$Repo/releases/download/$Version/$Asset"
 }
 
-$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-auth-" + [System.Guid]::NewGuid().ToString("N"))
+$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-auth-proxy-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -Path $TempDir -ItemType Directory -Force | Out-Null
 try {
   $ArchivePath = Join-Path $TempDir $Asset
@@ -81,22 +81,22 @@ try {
   Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath
 
   Expand-Archive -Path $ArchivePath -DestinationPath $TempDir -Force
-  $SourceBin = Join-Path $TempDir "codex-auth.exe"
+  $SourceBin = Join-Path $TempDir "codex-auth-proxy.exe"
   if (-not (Test-Path $SourceBin)) {
-    throw "Downloaded archive does not contain codex-auth.exe"
+    throw "Downloaded archive does not contain codex-auth-proxy.exe"
   }
 
   New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
-  $DestBin = Join-Path $InstallDir "codex-auth.exe"
+  $DestBin = Join-Path $InstallDir "codex-auth-proxy.exe"
   Copy-Item -Path $SourceBin -Destination $DestBin -Force
 
-  $SourceAutoBin = Join-Path $TempDir "codex-auth-auto.exe"
+  $SourceAutoBin = Join-Path $TempDir "codex-auth-proxy-auto.exe"
   if (Test-Path $SourceAutoBin) {
-    $DestAutoBin = Join-Path $InstallDir "codex-auth-auto.exe"
+    $DestAutoBin = Join-Path $InstallDir "codex-auth-proxy-auto.exe"
     Copy-Item -Path $SourceAutoBin -Destination $DestAutoBin -Force
   }
 
-  Write-Success "codex-auth installed successfully!"
+  Write-Success "codex-auth-proxy installed successfully!"
   Write-Info "Path : $DestBin"
 } finally {
   Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue

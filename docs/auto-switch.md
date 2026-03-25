@@ -1,16 +1,16 @@
 # Auto-Switch Implementation
 
-This document is the single source of truth for `codex-auth` background auto-switch behavior.
+This document is the single source of truth for `codex-auth-proxy` background auto-switch behavior.
 
 ## Commands and Stored Config
 
 User-facing commands:
 
-- `codex-auth config auto enable`
-- `codex-auth config auto disable`
-- `codex-auth config auto [--5h <percent>] [--weekly <percent>]`
-- `codex-auth config api enable`
-- `codex-auth config api disable`
+- `codex-auth-proxy config auto enable`
+- `codex-auth-proxy config auto disable`
+- `codex-auth-proxy config auto [--5h <percent>] [--weekly <percent>]`
+- `codex-auth-proxy config api enable`
+- `codex-auth-proxy config api disable`
 
 Stored registry fields:
 
@@ -25,7 +25,7 @@ The feature is off by default.
 
 When enabled, managed services run the long-lived watcher mode:
 
-- `codex-auth daemon --watch`
+- `codex-auth-proxy daemon --watch`
 
 The watcher keeps a single process alive and runs roughly once per second.
 Each cycle:
@@ -100,12 +100,12 @@ Platform bootstrap:
 
 - Linux/WSL: `systemd --user` persistent service
 - macOS: `LaunchAgent` with `KeepAlive`
-- Windows: user scheduled task with an `ONLOGON` trigger, restart-on-failure settings, and an unlimited execution time for `codex-auth-auto.exe`, plus an immediate `schtasks /Run` during enablement
+- Windows: user scheduled task with an `ONLOGON` trigger, restart-on-failure settings, and an unlimited execution time for `codex-auth-proxy-auto.exe`, plus an immediate `schtasks /Run` during enablement
 
 Service install paths still resolve from the real user home directory.
 Foreground commands other than `help`, `version`, `status`, and `daemon` still reconcile the managed service definition after they complete.
 `config auto enable` also prints a short usage-mode note so the user can see whether switching is currently running with default API-backed usage data or local-only fallback semantics.
-When migrating from older Linux/WSL timer-based installs, enable/reconcile also removes the legacy `codex-auth-autoswitch.timer` unit file instead of leaving the old minute timer behind.
+When migrating from older Linux/WSL timer-based installs, enable/reconcile also removes the legacy `codex-auth-proxy-autoswitch.timer` unit file instead of leaving the old minute timer behind.
 
 ## Limits
 

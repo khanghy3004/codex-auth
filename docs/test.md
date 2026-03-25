@@ -1,6 +1,6 @@
 # Windows Manual Test Guide
 
-This document describes how to manually validate the Windows `codex-auth.exe` in two isolated scenarios:
+This document describes how to manually validate the Windows `codex-auth-proxy.exe` in two isolated scenarios:
 
 - first use on the current `v0.2` layout
 - upgrade from `v0.1`/schema `2` to the current `v0.2` layout
@@ -27,7 +27,7 @@ email fragment from the copied fixture accounts for your local test run.
 Recommended session setup:
 
 ```powershell
-$Exe = 'D:\test\codex-auth-win32-x64\codex-auth.exe'
+$Exe = 'D:\test\codex-auth-proxy-win32-x64\codex-auth-proxy.exe'
 $env:CODEX_AUTH_SKIP_SERVICE_RECONCILE = '1'
 ```
 

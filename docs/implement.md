@@ -1,6 +1,6 @@
 # Implementation Details
 
-This document describes how `codex-auth` stores accounts, synchronizes auth files, and refreshes metadata. The tool reads and writes local files under `~/.codex`, and for ChatGPT-auth usage refresh it can call the ChatGPT usage endpoint for the current active account.
+This document describes how `codex-auth-proxy` stores accounts, synchronizes auth files, and refreshes metadata. The tool reads and writes local files under `~/.codex`, and for ChatGPT-auth usage refresh it can call the ChatGPT usage endpoint for the current active account.
 
 ## Packaging and Release
 
@@ -17,7 +17,7 @@ This document describes how `codex-auth` stores accounts, synchronizes auth file
 - `~/.codex/accounts/registry.json.bak.YYYYMMDD-hhmmss[.N]`
 - `~/.codex/sessions/...`
 
-`codex-auth` resolves `codex_home` from the real user home directory:
+`codex-auth-proxy` resolves `codex_home` from the real user home directory:
 
 1. `HOME/.codex`
 2. `USERPROFILE/.codex` (Windows fallback)
@@ -35,8 +35,8 @@ This document describes how `codex-auth` stores accounts, synchronizes auth file
 ## First Run and Empty Registry
 
 - If `registry.json` is empty and `~/.codex/auth.json` exists, the tool auto-imports it into `accounts/<account file key>.auth.json`.
-- If the registry is empty and there is no `auth.json`, `list` shows no accounts; use `codex-auth login` or `codex-auth import`.
-- `codex-auth add` is still accepted as a deprecated alias for `codex-auth login`.
+- If the registry is empty and there is no `auth.json`, `list` shows no accounts; use `codex-auth-proxy login` or `codex-auth-proxy import`.
+- `codex-auth-proxy add` is still accepted as a deprecated alias for `codex-auth-proxy login`.
 
 ## Registry Compatibility
 
@@ -53,7 +53,7 @@ This document describes how `codex-auth` stores accounts, synchronizes auth file
 
 ## Account Identity
 
-`codex-auth` now separates the user identity from the ChatGPT workspace/account context.
+`codex-auth-proxy` now separates the user identity from the ChatGPT workspace/account context.
 
 - `tokens.account_id` is the raw ChatGPT workspace/account context ID used for API calls. In the registry it is stored as `chatgpt_account_id`.
 - The JWT claim `https://api.openai.com/auth.chatgpt_account_id` must exist and match `tokens.account_id`.
@@ -82,10 +82,10 @@ This document describes how `codex-auth` stores accounts, synchronizes auth file
 
 ## Import Behavior
 
-- `codex-auth import <path>` auto-detects the path type:
+- `codex-auth-proxy import <path>` auto-detects the path type:
   - file path: imports one auth/config file.
   - directory path: batch imports config files from that directory.
-- `codex-auth import --cpa [<path>]` imports flat CPA token JSON:
+- `codex-auth-proxy import --cpa [<path>]` imports flat CPA token JSON:
   - explicit file path: imports one CPA JSON file
   - explicit directory path: batch imports direct child `.json` files from that directory
   - omitted path: defaults to `~/.cli-proxy-api` and scans direct child `.json` files there
@@ -93,7 +93,7 @@ This document describes how `codex-auth` stores accounts, synchronizes auth file
 - CPA conversion expects the flat fields `id_token`, `access_token`, `refresh_token`, `account_id`, and `last_refresh`; `refresh_token` is required and missing/empty values are skipped as `MissingRefreshToken`.
 - CPA imports keep the current report formatting and stream split used by standard imports.
 - `--cpa` cannot be combined with `--purge`.
-- `codex-auth import --purge [<path>]` rebuilds `registry.json` from scratch using the imported auth set for the current binary format.
+- `codex-auth-proxy import --purge [<path>]` rebuilds `registry.json` from scratch using the imported auth set for the current binary format.
 - During `--purge`, `auto_switch` and `api` configuration are carried forward from an existing `registry.json`; account snapshots, stored usage, active-account activation time, and per-account local rollout dedupe state are cleared and rebuilt from auth files.
 - When `--purge` is used without a path, the source defaults to `~/.codex/accounts/` and scans direct child auth files from that directory: current account snapshots (`*.auth.json`) plus `auth.json.bak.*` backups.
 - If `~/.codex/accounts/` is missing during `--purge`, it is treated as an empty snapshot set and the command still attempts to import the current `~/.codex/auth.json`.
@@ -144,14 +144,14 @@ If `auth.json` has no email, no `tokens.account_id`, no `chatgpt_user_id`, or ca
 Important limits:
 
 - Foreground commands sync `auth.json` strictly by `record_key`; there is no alternate key or “active” heuristic.
-- When background auto-switching is enabled, a background worker keeps checking rollout usage and can switch accounts without a foreground `codex-auth` command.
+- When background auto-switching is enabled, a background worker keeps checking rollout usage and can switch accounts without a foreground `codex-auth-proxy` command.
 
 ## Switching Accounts
 
 `switch` supports two modes:
 
-- Interactive: `codex-auth switch`
-- Non-interactive: `codex-auth switch <query>`
+- Interactive: `codex-auth-proxy switch`
+- Non-interactive: `codex-auth-proxy switch <query>`
 
 For non-interactive switching, the target account is matched case-insensitively by:
 
@@ -172,9 +172,9 @@ The switch command refreshes the current active account's usage once before rend
 
 `remove` now supports three foreground modes:
 
-- Interactive: `codex-auth remove`
-- Query-driven: `codex-auth remove <query>`
-- Clear-all: `codex-auth remove --all`
+- Interactive: `codex-auth-proxy remove`
+- Query-driven: `codex-auth-proxy remove <query>`
+- Clear-all: `codex-auth-proxy remove --all`
 
 For query-driven removal, the target query is matched case-insensitively by:
 
@@ -186,19 +186,19 @@ If exactly one account matches, it is removed immediately.
 If multiple accounts match in a TTY session, the command prints the matched account labels using the same display grouping as `list` and asks for confirmation with `Confirm delete? [y/N]:`; only `y` or `Y` proceeds.
 If multiple accounts match and stdin is not a TTY, the command exits non-zero instead of reading the pipe as confirmation input; the user must refine the query or rerun it interactively.
 
-When an account is removed, `codex-auth` deletes both:
+When an account is removed, `codex-auth-proxy` deletes both:
 
 - the account snapshot `accounts/<account file key>.auth.json`
 - any parseable `accounts/auth.json.bak.*` backup files whose auth `record_key` matches the removed account
 
-Malformed or non-parseable `auth.json.bak.*` files are left in place for manual cleanup or `codex-auth clean`.
+Malformed or non-parseable `auth.json.bak.*` files are left in place for manual cleanup or `codex-auth-proxy clean`.
 
 If the removed account was the active one:
 
-- when other accounts still remain, `codex-auth` activates the remaining account with the best current usage score
+- when other accounts still remain, `codex-auth-proxy` activates the remaining account with the best current usage score
 - if `~/.codex/auth.json` is missing and another account remains, `remove` recreates it from the replacement account snapshot
 - `~/.codex/auth.json` is only rewritten or deleted when the current auth file is syncable and can be identified as the removed active account
-- when no accounts remain and the current active auth file matches the removed active account, `codex-auth` deletes `~/.codex/auth.json`
+- when no accounts remain and the current active auth file matches the removed active account, `codex-auth-proxy` deletes `~/.codex/auth.json`
 - if the current `~/.codex/auth.json` is malformed, unsyncable, or otherwise does not match the removed active account, `remove` leaves that file untouched
 
 For `remove --all`, the command clears all accounts tracked in `registry.json` and deletes any matching managed snapshots/backups. If the current `~/.codex/auth.json` is syncable and its `record_key` matches one of those tracked accounts, `remove --all` deletes it even when `active_account_key` is null or stale. If the current `~/.codex/auth.json` is malformed, unsyncable, or otherwise cannot be identified as one of those tracked accounts, `remove --all` leaves that file untouched.
@@ -216,7 +216,7 @@ This document keeps only the cross-reference points that matter to the rest of t
 
 - background config still lives in `registry.json` under top-level `auto_switch` and `api` blocks
 - managed services still resolve install paths from the real user home directory
-- successful foreground `codex-auth` commands except `help`, `version`, `status`, and `daemon` still reconcile the managed service definition
+- successful foreground `codex-auth-proxy` commands except `help`, `version`, `status`, and `daemon` still reconcile the managed service definition
 - Linux/WSL `config auto enable` still requires a working `systemd --user` session
 
 ## Backups
@@ -225,8 +225,8 @@ This document keeps only the cross-reference points that matter to the rest of t
 - `registry.json` backups are created only when the contents change.
 - Both are stored under `~/.codex/accounts/` using the local-time filename format `*.bak.YYYYMMDD-hhmmss` (with `.N` added only on same-second collisions) and capped at the most recent 5 files.
 - If local-time conversion is unavailable, backup filenames fall back to `*.bak.<unix-seconds>`.
-- `codex-auth clean` is whitelist-based for the current schema and only affects `~/.codex/accounts/`: it keeps only live snapshot files referenced by the registry and deletes other stale entries under `accounts/`.
-- If `accounts/registry.json` is missing, `codex-auth clean` still prunes backup files but skips stale snapshot deletion so recovery snapshots remain available for `import --purge` or manual repair.
+- `codex-auth-proxy clean` is whitelist-based for the current schema and only affects `~/.codex/accounts/`: it keeps only live snapshot files referenced by the registry and deletes other stale entries under `accounts/`.
+- If `accounts/registry.json` is missing, `codex-auth-proxy clean` still prunes backup files but skips stale snapshot deletion so recovery snapshots remain available for `import --purge` or manual repair.
 
 
 ## Usage and Rate Limits
@@ -259,7 +259,7 @@ Foreground usage refresh is active-account-only and depends on `api.usage`:
 - In watcher mode, rollout scanning caches the newest rollout file between bounded full rescans so large `~/.codex/sessions` trees are not fully re-walked on every 1-second loop.
 - The free-plan `35%` real-time guard applies only when the 5h trigger comes from an actual 300-minute window or an unlabeled primary window; weekly-only free accounts still switch based on the configured weekly threshold.
 - For auto-switch candidate scoring, free accounts that expose only a single weekly (`10080`-minute) window still remain eligible and use that weekly remaining percentage as their candidate score.
-- On Linux/WSL, watcher installation/removal now explicitly deletes the old `codex-auth-autoswitch.timer` unit file so legacy minute-timer installs do not continue to fire after migration to the watcher service.
+- On Linux/WSL, watcher installation/removal now explicitly deletes the old `codex-auth-proxy-autoswitch.timer` unit file so legacy minute-timer installs do not continue to fire after migration to the watcher service.
 - `switch` refreshes only the current active account before the selection/switch step; it does not refresh the newly selected account after the switch completes.
 - API refresh does not mutate any local rollout attribution state.
 - The rollout files still do not expose a stable account identity, so local-session ownership remains activation-window based rather than identity based.

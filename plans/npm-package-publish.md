@@ -1,20 +1,20 @@
 ---
 name: npm-package-publish
-description: Package codex-auth as @loongphy/codex-auth and publish to npm on tag pushes
+description: Package codex-auth-proxy as @loongphy/codex-auth-proxy and publish to npm on tag pushes
 ---
 
 # Plan
 
-Package `codex-auth` as the public npm package `@loongphy/codex-auth` and make `v*` tag pushes publish both GitHub release assets and npm packages automatically. Use npm's platform-aware install model: one root package exposes the command, and four platform packages carry the actual binaries for Linux x64, macOS x64, macOS ARM64, and Windows x64.
+Package `codex-auth-proxy` as the public npm package `@loongphy/codex-auth-proxy` and make `v*` tag pushes publish both GitHub release assets and npm packages automatically. Use npm's platform-aware install model: one root package exposes the command, and four platform packages carry the actual binaries for Linux x64, macOS x64, macOS ARM64, and Windows x64.
 
 ## Requirements
-- Publish the root npm package as `@loongphy/codex-auth`.
+- Publish the root npm package as `@loongphy/codex-auth-proxy`.
 - Publish four platform packages for binary delivery:
-  - `@loongphy/codex-auth-linux-x64`
-  - `@loongphy/codex-auth-darwin-x64`
-  - `@loongphy/codex-auth-darwin-arm64`
-  - `@loongphy/codex-auth-win32-x64`
-- Keep the installed command name as `codex-auth`.
+  - `@loongphy/codex-auth-proxy-linux-x64`
+  - `@loongphy/codex-auth-proxy-darwin-x64`
+  - `@loongphy/codex-auth-proxy-darwin-arm64`
+  - `@loongphy/codex-auth-proxy-win32-x64`
+- Keep the installed command name as `codex-auth-proxy`.
 - On `v*` tag push, publish stable versions to npm dist-tag `latest`.
 - On prerelease tags such as `v1.2.0-rc.1`, publish to npm dist-tag `next`.
 - Enforce version alignment between git tag, npm package versions, and `src/version.zig`.
@@ -36,14 +36,14 @@ Package `codex-auth` as the public npm package `@loongphy/codex-auth` and make `
 
 ## Data model / API changes
 - New public npm install surface:
-  - `npm install -g @loongphy/codex-auth`
-  - `npx @loongphy/codex-auth ...`
+  - `npm install -g @loongphy/codex-auth-proxy`
+  - `npx @loongphy/codex-auth-proxy ...`
 - No new runtime API; this remains a CLI-only package.
 - New npm publish requirement: configure Trusted Publishing for the root package and all four platform packages.
 
 ## Action items
-[ ] Add a root npm package manifest for `@loongphy/codex-auth` with `bin`, `optionalDependencies`, `files`, license/readme metadata, and publish config for a public scoped package.
-[ ] Add a launcher script that resolves the installed platform package and execs the contained `codex-auth` binary, with a clear error when the current OS/arch is unsupported or the platform package is missing.
+[ ] Add a root npm package manifest for `@loongphy/codex-auth-proxy` with `bin`, `optionalDependencies`, `files`, license/readme metadata, and publish config for a public scoped package.
+[ ] Add a launcher script that resolves the installed platform package and execs the contained `codex-auth-proxy` binary, with a clear error when the current OS/arch is unsupported or the platform package is missing.
 [ ] Create four platform package directories with package manifests that declare strict `os` and `cpu` fields and contain exactly one packaged binary for the matching target.
 [ ] Extend the build pipeline to compile release binaries for the four supported targets and stage them into the matching platform package directories.
 [ ] Add a version-check step that fails if the pushed tag version, root package version, platform package versions, and `src/version.zig` do not match exactly.
@@ -56,7 +56,7 @@ Package `codex-auth` as the public npm package `@loongphy/codex-auth` and make `
 - `zig build test`
 - Build all four supported release targets in CI before any publish step.
 - `npm pack` for the root package and at least one platform package to verify package contents.
-- Install from packed tarballs in CI on the host runner and verify `codex-auth --version`.
+- Install from packed tarballs in CI on the host runner and verify `codex-auth-proxy --version`.
 - If any `.zig` file changes during implementation, run `zig build run -- list` per repo policy.
 
 ## Risks and edge cases
@@ -66,6 +66,6 @@ Package `codex-auth` as the public npm package `@loongphy/codex-auth` and make `
 - Tag/version mismatch handling must fail early to avoid partial npm publishes with inconsistent versions.
 
 ## Assumptions
-- `@loongphy/codex-auth` is available on npm and can be published as a public scoped package.
+- `@loongphy/codex-auth-proxy` is available on npm and can be published as a public scoped package.
 - The preferred distribution model is a root package plus per-platform binary packages using npm `optionalDependencies` and `os/cpu`, not a single all-platform tarball and not a postinstall GitHub download step.
 - Existing shell and PowerShell installers remain supported and continue to use GitHub Releases.

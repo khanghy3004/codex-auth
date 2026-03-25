@@ -80,8 +80,8 @@ export class GenericOpenAIProvider extends Provider {
       delete forwardHeaders['content-length'];
       
       forwardHeaders['Authorization'] = `Bearer ${this.apiKey}`;
-      forwardHeaders['HTTP-Referer'] = 'https://github.com/Loongphy/codex-auth';
-      forwardHeaders['X-Title'] = 'Codex Auth Proxy';
+      forwardHeaders['HTTP-Referer'] = 'https://github.com/Loongphy/codex-auth-proxy';
+      forwardHeaders['X-Title'] = 'Codex Auth Proxy Proxy';
 
       const response = await axios({
         method: 'POST',
