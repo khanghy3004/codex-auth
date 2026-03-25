@@ -1,5 +1,5 @@
 {
-  "name": "@khanghy3004/codex-auth-proxy",
+  "name": "codex-auth-proxy",
   "version": "0.3.1",
   "description": "Rotating proxy service for Codex accounts",
   "license": "MIT",

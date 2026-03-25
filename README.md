@@ -30,19 +30,19 @@ After that, you can use `codex login` or `codex-auth-proxy login` to sign in and
 Install with npm:
 
 ```shell
-npm install -g @khanghy3004/codex-auth-proxy
+npm install -g codex-auth-proxy
 ```
 
   You can also run it without a global install:
 
 ```shell
-npx @khanghy3004/codex-auth-proxy list
+npx codex-auth-proxy list
 ```
 
   npm packages currently support Linux x64, macOS x64, macOS arm64, and Windows x64.
 
 > [!NOTE]
-> If you only installed `@khanghy3004/codex-auth-proxy` with npm, you do not need any legacy cleanup steps.
+> If you only installed `codex-auth-proxy` with npm, you do not need any legacy cleanup steps.
 > Older Bash/PowerShell GitHub-release installs could leave a standalone `codex-auth-proxy` binary outside npm's install path.
 > If you previously used those legacy installers, remove the leftover binaries and profile changes during migration.
 
@@ -53,7 +53,7 @@ npx @khanghy3004/codex-auth-proxy list
 Remove the npm package:
 
 ```shell
-npm uninstall -g @khanghy3004/codex-auth-proxy
+npm uninstall -g codex-auth-proxy
 ```
 
 #### Legacy Bash Installer
