@@ -40,7 +40,7 @@ if (maybePrintPreviewVersion(process.argv.slice(2))) {
 }
 
 const args = process.argv.slice(2);
-if (args[0] === "proxy") {
+if (args[0] === "start" || args[0] === "proxy") {
   const proxyPath = path.join(__dirname, "..", "dist", "src", "proxy", "index.js");
   if (!fs.existsSync(proxyPath)) {
     console.warn("Proxy component not built. Running build...");
@@ -48,7 +48,9 @@ if (args[0] === "proxy") {
   }
   const proxy = require(proxyPath);
   if (proxy && typeof proxy.startProxy === "function") {
-    proxy.startProxy();
+    // Check for custom port: codex-auth-proxy start 9000
+    const customPort = args[1] && !isNaN(Number(args[1])) ? Number(args[1]) : undefined;
+    proxy.startProxy(customPort);
   } else {
     console.error("Proxy component is missing startProxy function.");
     process.exit(1);

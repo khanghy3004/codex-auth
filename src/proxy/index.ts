@@ -146,10 +146,11 @@ async function handleProxyRequest(req: Request, res: Response) {
   res.status(429).json({ error: 'Max retry attempts reached.' });
 }
 
-export function startProxy() {
-  app.listen(port, () => {
-    console.log(`[Proxy] Codex Proxy Server started on http://localhost:${port}`);
-    console.log(`[Proxy] Point your Codex client to http://localhost:${port}/v1`);
+export function startProxy(customPort?: number) {
+  const finalPort = customPort || Number(port);
+  app.listen(finalPort, () => {
+    console.log(`[Proxy] Codex Proxy Server started on http://localhost:${finalPort}`);
+    console.log(`[Proxy] Point your Codex client to http://localhost:${finalPort}/v1`);
   });
 }
 

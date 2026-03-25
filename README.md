@@ -97,7 +97,7 @@ Remove-Item "$env:LOCALAPPDATA\codex-auth-proxy\bin\codex-auth-proxy-auto.exe" -
 | `codex-auth-proxy switch [<email>]` | Switch active account interactively or by partial match |
 | `codex-auth-proxy remove` | Remove accounts with interactive multi-select |
 | `codex-auth-proxy status` | Show auto-switch, service, and usage status |
-| `codex-auth-proxy proxy start` | Start the local proxy server (port 8080) |
+| `codex-auth-proxy start [<port>]` | Start the local proxy server (default: 8080) |
 
 > `codex-auth-proxy add` is still accepted as a deprecated alias for `codex-auth-proxy login`.
 
@@ -297,13 +297,14 @@ Create `~/.codex/providers.json` with your custom OpenAI-compatible providers:
 
 ### Step 2: Start the Proxy
 
-```shell
-# Standard start
-codex-auth-proxy proxy start
-
-# Start on a custom port
-PROXY_PORT=9090 codex-auth-proxy proxy start
-```
+#1.  **Start the proxy**:
+    ```bash
+    codex-auth-proxy start
+    ```
+    *Optional: Start on a custom port:*
+    ```bash
+    codex-auth-proxy start 9000
+    ```
 
 ### Step 3: Point Codex to Local Proxy
 
