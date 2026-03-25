@@ -1,0 +1,14 @@
+{
+  "providers": [
+    {
+      "name": "openrouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "apiKey": "sk-or-v1-..."
+    },
+    {
+      "name": "my-custom-ai",
+      "baseUrl": "https://api.myai.com/v1",
+      "apiKey": "sk-..."
+    }
+  ]
+}

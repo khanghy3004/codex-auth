@@ -39,6 +39,23 @@ if (maybePrintPreviewVersion(process.argv.slice(2))) {
   process.exit(0);
 }
 
+const args = process.argv.slice(2);
+if (args[0] === "proxy") {
+  const proxyPath = path.join(__dirname, "..", "dist", "src", "proxy", "index.js");
+  if (!fs.existsSync(proxyPath)) {
+    console.warn("Proxy component not built. Running build...");
+    spawnSync("npm", ["run", "build"], { stdio: "inherit", cwd: path.join(__dirname, "..") });
+  }
+  const proxy = require(proxyPath);
+  if (proxy && typeof proxy.startProxy === "function") {
+    proxy.startProxy();
+  } else {
+    console.error("Proxy component is missing startProxy function.");
+    process.exit(1);
+  }
+  return;
+}
+
 function resolveBinary() {
   const key = `${process.platform}:${process.arch}`;
   const packageName = packageMap[key];

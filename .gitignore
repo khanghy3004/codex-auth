@@ -1,11 +1,12 @@
-# Zig build artifacts
-zig-out/
-.zig-cache/
+# Node.js
+node_modules/
 dist/
-*.tgz
+*.log
+package-lock.json
 
 # IDE/Editor
 .idea/
+.vscode/
 
 # Local benchmarking workspace
 benchmark/
