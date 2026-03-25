@@ -20,7 +20,7 @@ function readRootPackage() {
   }
 }
 
-function maybePrintPreviewVersion(argv) {
+function maybePrintVersion(argv) {
   if (argv.length !== 1) return false;
   if (argv[0] !== "--version" && argv[0] !== "-V") return false;
 
@@ -28,14 +28,17 @@ function maybePrintPreviewVersion(argv) {
   if (!rootPackage) return false;
 
   const previewLabel = rootPackage.codexAuthPreviewLabel;
-  if (typeof previewLabel !== "string" || previewLabel.length === 0) return false;
-  if (typeof rootPackage.version !== "string" || rootPackage.version.length === 0) return false;
-
-  process.stdout.write(`codex-auth-proxy ${rootPackage.version} (preview ${previewLabel})\n`);
+  const version = rootPackage.version || "0.0.0";
+  
+  if (previewLabel) {
+    process.stdout.write(`codex-auth-proxy ${version} (preview ${previewLabel})\n`);
+  } else {
+    process.stdout.write(`codex-auth-proxy ${version}\n`);
+  }
   return true;
 }
 
-if (maybePrintPreviewVersion(process.argv.slice(2))) {
+if (maybePrintVersion(process.argv.slice(2))) {
   process.exit(0);
 }
 
@@ -88,8 +91,32 @@ function resolveBinary() {
 
 const binaryPath = resolveBinary();
 const child = spawnSync(binaryPath, process.argv.slice(2), {
-  stdio: "inherit"
+  stdio: ["inherit", "pipe", "inherit"]
 });
+
+if (child.stdout) {
+  let output = child.stdout.toString();
+  const args = process.argv.slice(2);
+  const isHelp = args.length === 0 || args[0] === "help" || args.includes("--help") || args.includes("-h");
+  const isVersion = args.includes("--version") || args.includes("-V");
+  
+  if (isHelp || isVersion) {
+    const rootPackage = readRootPackage();
+    if (rootPackage && rootPackage.version) {
+       // Replace version in header: "codex-auth 0.2.2-alpha.4" -> "codex-auth-proxy 0.1.0"
+       output = output.replace(/codex-auth-proxy \d+\.\d+\.\d+[^ \n]*/g, `codex-auth-proxy ${rootPackage.version}`);
+       output = output.replace(/codex-auth \d+\.\d+\.\d+[^ \n]*/g, `codex-auth-proxy ${rootPackage.version}`);
+    }
+    
+    if (isHelp) {
+      const startCmd = "  start [<port>]          Start the local proxy server (default: 8080)";
+      if (output.includes("Commands:")) {
+         output = output.replace("Commands:\n", `Commands:\n\n${startCmd}\n`);
+      }
+    }
+  }
+  process.stdout.write(output);
+}
 
 if (child.error) {
   console.error(child.error.message);
