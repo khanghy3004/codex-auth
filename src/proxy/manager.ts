@@ -24,7 +24,7 @@ export class AccountManager {
   }
 
   public loadAccounts() {
-    const registryPath = path.join(this.codexHome, 'registry.json');
+    const registryPath = path.join(this.codexHome, 'accounts', 'registry.json');
     if (!fs.existsSync(registryPath)) return;
 
     try {
@@ -71,10 +71,17 @@ export class AccountManager {
   }
 
   private loadTokenForAccount(account: AccountInfo) {
-    const authPath = path.join(this.codexHome, 'accounts', `${account.account_key}.auth.json`);
-    if (fs.existsSync(authPath)) {
+    // account_key needs to be base64 encoded for the file name (without padding)
+    const encodedKey = Buffer.from(account.account_key).toString('base64').replace(/=/g, '');
+    const authPath = path.join(this.codexHome, 'accounts', `${encodedKey}.auth.json`);
+    
+    // Fallback: try raw key if base64 fails
+    const rawAuthPath = path.join(this.codexHome, 'accounts', `${account.account_key}.auth.json`);
+    const finalPath = fs.existsSync(authPath) ? authPath : rawAuthPath;
+
+    if (fs.existsSync(finalPath)) {
       try {
-        const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+        const authData = JSON.parse(fs.readFileSync(finalPath, 'utf8'));
         account.access_token = authData.access_token;
         account.chatgpt_account_id = authData.chatgpt_account_id;
       } catch (error) {
