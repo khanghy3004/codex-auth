@@ -25,7 +25,10 @@ export class AccountManager {
 
   public loadAccounts() {
     const registryPath = path.join(this.codexHome, 'accounts', 'registry.json');
-    if (!fs.existsSync(registryPath)) return;
+    if (!fs.existsSync(registryPath)) {
+      console.warn(`[Proxy] Registry not found at: ${registryPath}`);
+      return;
+    }
 
     try {
       const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
@@ -71,22 +74,34 @@ export class AccountManager {
   }
 
   private loadTokenForAccount(account: AccountInfo) {
-    // account_key needs to be base64 encoded for the file name (without padding)
-    const encodedKey = Buffer.from(account.account_key).toString('base64').replace(/=/g, '');
-    const authPath = path.join(this.codexHome, 'accounts', `${encodedKey}.auth.json`);
-    
-    // Fallback: try raw key if base64 fails
-    const rawAuthPath = path.join(this.codexHome, 'accounts', `${account.account_key}.auth.json`);
-    const finalPath = fs.existsSync(authPath) ? authPath : rawAuthPath;
+    const accountsDir = path.join(this.codexHome, 'accounts');
+    if (!fs.existsSync(accountsDir)) return;
 
-    if (fs.existsSync(finalPath)) {
+    const files = fs.readdirSync(accountsDir);
+    const encodedKey = Buffer.from(account.account_key).toString('base64').replace(/=/g, '');
+    
+    // Search for both encoded and raw keys in the filenames
+    const filename = files.find(f => 
+      f.startsWith(encodedKey) || 
+      f.startsWith(account.account_key)
+    );
+
+    if (filename) {
+      const finalPath = path.join(accountsDir, filename);
       try {
         const authData = JSON.parse(fs.readFileSync(finalPath, 'utf8'));
-        account.access_token = authData.access_token;
-        account.chatgpt_account_id = authData.chatgpt_account_id;
+        if (authData.tokens) {
+          account.access_token = authData.tokens.access_token;
+          account.chatgpt_account_id = authData.tokens.account_id || authData.chatgpt_account_id;
+        } else {
+          account.access_token = authData.access_token;
+          account.chatgpt_account_id = authData.chatgpt_account_id;
+        }
       } catch (error) {
         console.error(`Failed to load auth for ${account.email}:`, error);
       }
+    } else {
+      // console.warn(`[Proxy] No auth file found for ${account.email}`);
     }
   }
 
