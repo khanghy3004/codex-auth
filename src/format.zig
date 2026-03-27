@@ -5,9 +5,7 @@ const registry = @import("registry.zig");
 const cli = @import("cli.zig");
 const io_util = @import("io_util.zig");
 const timefmt = @import("timefmt.zig");
-const c = @cImport({
-    @cInclude("time.h");
-});
+const time_util = @import("time_util.zig");
 
 const ansi = struct {
     const reset = "\x1b[0m";
@@ -16,7 +14,7 @@ const ansi = struct {
 };
 
 fn colorEnabled() bool {
-    return std.fs.File.stdout().isTty();
+    return std.io.getStdOut().isTty();
 }
 
 fn planDisplay(rec: *const registry.AccountRecord, missing: []const u8) []const u8 {
@@ -24,17 +22,22 @@ fn planDisplay(rec: *const registry.AccountRecord, missing: []const u8) []const 
     return missing;
 }
 
-pub fn printAccounts(allocator: std.mem.Allocator, reg: *registry.Registry, fmt: cli.OutputFormat) !void {
+pub fn printAccounts(
+    allocator: std.mem.Allocator,
+    reg: *registry.Registry,
+    providers_cfg: *registry.ProvidersConfig,
+    fmt: cli.OutputFormat,
+) !void {
     switch (fmt) {
-        .table => try printAccountsTable(reg),
-        .json => try printAccountsJson(reg),
-        .csv => try printAccountsCsv(reg),
-        .compact => try printAccountsCompact(reg),
+        .table => try printAccountsTable(reg, providers_cfg),
+        .json => try printAccountsJson(reg, providers_cfg),
+        .csv => try printAccountsCsv(reg, providers_cfg),
+        .compact => try printAccountsCompact(reg, providers_cfg),
     }
     _ = allocator;
 }
 
-fn printAccountsTable(reg: *registry.Registry) !void {
+fn printAccountsTable(reg: *registry.Registry, providers_cfg: *registry.ProvidersConfig) !void {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
@@ -73,6 +76,11 @@ fn printAccountsTable(reg: *registry.Registry) !void {
             widths[3] = @max(widths[3], rate_week_str.len);
             widths[4] = @max(widths[4], last_str.len);
         }
+    }
+
+    for (providers_cfg.providers.items) |p| {
+        widths[0] = @max(widths[0], p.name.len);
+        widths[1] = @max(widths[1], "custom".len);
     }
 
     adjustListWidths(&widths, prefix_len, sep_len);
@@ -164,10 +172,34 @@ fn printAccountsTable(reg: *registry.Registry) !void {
         }
     }
 
-    try out.flush();
+    if (providers_cfg.providers.items.len > 0) {
+        for (providers_cfg.providers.items) |p| {
+            const account_cell = try truncateAlloc(p.name, widths[0]);
+            defer std.heap.page_allocator.free(account_cell);
+            const plan_cell = try truncateAlloc("custom", widths[1]);
+            defer std.heap.page_allocator.free(plan_cell);
+
+            if (use_color) try out.writeAll(ansi.dim);
+            try out.writeAll("  ");
+            try writePadded(out, account_cell, widths[0]);
+            try out.writeAll("  ");
+            try writePadded(out, plan_cell, widths[1]);
+            try out.writeAll("  ");
+            try writePadded(out, "-", widths[2]);
+            try out.writeAll("  ");
+            try writePadded(out, "-", widths[3]);
+            try out.writeAll("  ");
+            try writePadded(out, "-", widths[4]);
+            try out.writeAll("\n");
+            if (use_color) try out.writeAll(ansi.reset);
+        }
+    }
+
+    try stdout.flush();
 }
 
-fn printAccountsJson(reg: *registry.Registry) !void {
+fn printAccountsJson(reg: *registry.Registry, providers_cfg: *registry.ProvidersConfig) !void {
+    _ = providers_cfg;
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
@@ -178,12 +210,13 @@ fn printAccountsJson(reg: *registry.Registry) !void {
         .api = reg.api,
         .accounts = reg.accounts.items,
     };
-    try std.json.Stringify.value(dump, .{ .whitespace = .indent_2 }, out);
+    try std.json.stringify(dump, .{ .whitespace = .indent_2 }, out);
     try out.writeAll("\n");
-    try out.flush();
+    try stdout.flush();
 }
 
-fn printAccountsCsv(reg: *registry.Registry) !void {
+fn printAccountsCsv(reg: *registry.Registry, providers_cfg: *registry.ProvidersConfig) !void {
+    _ = providers_cfg;
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
@@ -208,10 +241,11 @@ fn printAccountsCsv(reg: *registry.Registry) !void {
             .{ if (active) "1" else "0", account_key, chatgpt_account_id, chatgpt_user_id, email, plan, rate_5h_str, rate_week_str, last },
         );
     }
-    try out.flush();
+    try stdout.flush();
 }
 
-fn printAccountsCompact(reg: *registry.Registry) !void {
+fn printAccountsCompact(reg: *registry.Registry, providers_cfg: *registry.ProvidersConfig) !void {
+    _ = providers_cfg;
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
@@ -232,7 +266,7 @@ fn printAccountsCompact(reg: *registry.Registry) !void {
             .{ if (active) "* " else "  ", email, plan, rate_5h_str, rate_week_str, last },
         );
     }
-    try out.flush();
+    try stdout.flush();
 }
 
 const RegistryOut = struct {
@@ -279,71 +313,21 @@ const ResetParts = struct {
     }
 };
 
-fn localtimeCompat(ts: i64, out_tm: *c.struct_tm) bool {
-    if (comptime builtin.os.tag == .windows) {
-        // Bind directly to the exported CRT symbol on Windows.
-        if (comptime @hasDecl(c, "_localtime64_s") and @hasDecl(c, "__time64_t")) {
-            var t64 = std.math.cast(c.__time64_t, ts) orelse return false;
-            return c._localtime64_s(out_tm, &t64) == 0;
-        }
-        return false;
-    }
-
-    var t = std.math.cast(c.time_t, ts) orelse return false;
-    if (comptime @hasDecl(c, "localtime_r")) {
-        return c.localtime_r(&t, out_tm) != null;
-    }
-
-    if (comptime @hasDecl(c, "localtime")) {
-        const tm_ptr = c.localtime(&t);
-        if (tm_ptr == null) return false;
-        out_tm.* = tm_ptr.*;
-        return true;
-    }
-
-    return false;
-}
-
 fn resetPartsAlloc(reset_at: i64, now: i64) !ResetParts {
-    var tm: c.struct_tm = undefined;
-    if (!localtimeCompat(reset_at, &tm)) {
-        return ResetParts{
-            .time = try std.fmt.allocPrint(std.heap.page_allocator, "-", .{}),
-            .date = try std.fmt.allocPrint(std.heap.page_allocator, "-", .{}),
-            .same_day = true,
-        };
-    }
-    var now_tm: c.struct_tm = undefined;
-    if (!localtimeCompat(now, &now_tm)) {
-        return ResetParts{
-            .time = try std.fmt.allocPrint(std.heap.page_allocator, "-", .{}),
-            .date = try std.fmt.allocPrint(std.heap.page_allocator, "-", .{}),
-            .same_day = true,
-        };
-    }
+    const dt_reset = time_util.fromTimestamp(reset_at);
+    const dt_now = time_util.fromTimestamp(now);
 
-    const same_day = tm.tm_year == now_tm.tm_year and tm.tm_mon == now_tm.tm_mon and tm.tm_mday == now_tm.tm_mday;
-    const hour = @as(u32, @intCast(tm.tm_hour));
-    const min = @as(u32, @intCast(tm.tm_min));
-    const day = @as(u32, @intCast(tm.tm_mday));
+    const same_day = (dt_reset.year == dt_now.year and dt_reset.month == dt_now.month and dt_reset.day == dt_now.day);
+
     const months = [_][]const u8{
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     };
-    const month_idx: usize = if (tm.tm_mon < 0) 0 else @min(@as(usize, @intCast(tm.tm_mon)), months.len - 1);
+    const month_name = months[dt_reset.month - 1];
+
     return ResetParts{
-        .time = try std.fmt.allocPrint(std.heap.page_allocator, "{d:0>2}:{d:0>2}", .{ hour, min }),
-        .date = try std.fmt.allocPrint(std.heap.page_allocator, "{d} {s}", .{ day, months[month_idx] }),
+        .time = try std.fmt.allocPrint(std.heap.page_allocator, "{d:0>2}:{d:0>2}", .{ dt_reset.hour, dt_reset.minute }),
+        .date = try std.fmt.allocPrint(std.heap.page_allocator, "{d} {s}", .{ dt_reset.day, month_name }),
         .same_day = same_day,
     };
 }
@@ -412,41 +396,25 @@ fn remainingPercent(used: f64) i64 {
 }
 
 fn formatResetTimeAlloc(ts: i64, now: i64) ![]u8 {
-    var tm: c.struct_tm = undefined;
-    if (!localtimeCompat(ts, &tm)) {
-        return try std.fmt.allocPrint(std.heap.page_allocator, "-", .{});
-    }
-    var now_tm: c.struct_tm = undefined;
-    if (!localtimeCompat(now, &now_tm)) {
-        return try std.fmt.allocPrint(std.heap.page_allocator, "-", .{});
-    }
+    const dt_ts = time_util.fromTimestamp(ts);
+    const dt_now = time_util.fromTimestamp(now);
 
-    const same_day = tm.tm_year == now_tm.tm_year and tm.tm_mon == now_tm.tm_mon and tm.tm_mday == now_tm.tm_mday;
-    const hour = @as(u32, @intCast(tm.tm_hour));
-    const min = @as(u32, @intCast(tm.tm_min));
-    if (same_day) {
-        return std.fmt.allocPrint(std.heap.page_allocator, "{d:0>2}:{d:0>2}", .{ hour, min });
-    }
-    const day = @as(u32, @intCast(tm.tm_mday));
+    const same_day = (dt_ts.year == dt_now.year and dt_ts.month == dt_now.month and dt_ts.day == dt_now.day);
+
     const months = [_][]const u8{
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     };
-    const month_idx: usize = if (tm.tm_mon < 0) 0 else @min(@as(usize, @intCast(tm.tm_mon)), months.len - 1);
-    return std.fmt.allocPrint(std.heap.page_allocator, "{d:0>2}:{d:0>2} on {d} {s}", .{ hour, min, day, months[month_idx] });
+    const month_name = months[dt_ts.month - 1];
+
+    if (same_day) {
+        return try std.fmt.allocPrint(std.heap.page_allocator, "{d:0>2}:{d:0>2}", .{ dt_ts.hour, dt_ts.minute });
+    } else {
+        return try std.fmt.allocPrint(std.heap.page_allocator, "{d} {s}", .{ dt_ts.day, month_name });
+    }
 }
 
-fn printTableBorder(out: *std.Io.Writer, widths: []const usize) !void {
+fn printTableBorder(out: std.io.AnyWriter, widths: []const usize) !void {
     try out.writeAll("+");
     for (widths) |w| {
         var i: usize = 0;
@@ -458,7 +426,7 @@ fn printTableBorder(out: *std.Io.Writer, widths: []const usize) !void {
     try out.writeAll("\n");
 }
 
-fn printTableDivider(out: *std.Io.Writer, widths: []const usize) !void {
+fn printTableDivider(out: std.io.AnyWriter, widths: []const usize) !void {
     try out.writeAll("+");
     for (widths) |w| {
         var i: usize = 0;
@@ -470,7 +438,7 @@ fn printTableDivider(out: *std.Io.Writer, widths: []const usize) !void {
     try out.writeAll("\n");
 }
 
-fn printTableEnd(out: *std.Io.Writer, widths: []const usize) !void {
+fn printTableEnd(out: std.io.AnyWriter, widths: []const usize) !void {
     try out.writeAll("+");
     for (widths) |w| {
         var i: usize = 0;
@@ -482,7 +450,7 @@ fn printTableEnd(out: *std.Io.Writer, widths: []const usize) !void {
     try out.writeAll("\n");
 }
 
-fn printTableRow(out: *std.Io.Writer, widths: []const usize, cells: []const []const u8) !void {
+fn printTableRow(out: std.io.AnyWriter, widths: []const usize, cells: []const []const u8) !void {
     try out.writeAll("|");
     for (cells, 0..) |cell, idx| {
         try out.writeAll(" ");
@@ -497,7 +465,7 @@ fn printTableRow(out: *std.Io.Writer, widths: []const usize, cells: []const []co
     try out.writeAll("\n");
 }
 
-fn writePadded(out: *std.Io.Writer, value: []const u8, width: usize) !void {
+fn writePadded(out: std.io.AnyWriter, value: []const u8, width: usize) !void {
     try out.writeAll(value);
     if (value.len >= width) return;
     var i: usize = 0;
@@ -507,7 +475,7 @@ fn writePadded(out: *std.Io.Writer, value: []const u8, width: usize) !void {
     }
 }
 
-fn writeRepeat(out: *std.Io.Writer, ch: u8, count: usize) !void {
+fn writeRepeat(out: std.io.AnyWriter, ch: u8, count: usize) !void {
     var i: usize = 0;
     while (i < count) : (i += 1) {
         try out.writeByte(ch);
@@ -636,7 +604,7 @@ fn tableTotalWidth(widths: []const usize) usize {
 }
 
 fn terminalWidth() usize {
-    const stdout_file = std.fs.File.stdout();
+    const stdout_file = std.io.getStdOut();
     if (!stdout_file.isTty()) return 0;
 
     if (comptime builtin.os.tag == .windows) {
@@ -649,14 +617,14 @@ fn terminalWidth() usize {
         return @as(usize, @intCast(width));
     } else {
         var wsz: std.posix.winsize = .{
-            .row = 0,
-            .col = 0,
-            .xpixel = 0,
-            .ypixel = 0,
+            .ws_row = 0,
+            .ws_col = 0,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
         };
         const rc = std.posix.system.ioctl(stdout_file.handle, std.posix.T.IOCGWINSZ, @intFromPtr(&wsz));
         if (std.posix.errno(rc) != .SUCCESS) return 0;
-        return @as(usize, wsz.col);
+        return @as(usize, wsz.ws_col);
     }
 }
 
@@ -669,28 +637,21 @@ fn truncateAlloc(value: []const u8, max_len: usize) ![]u8 {
 
 fn formatTimestampAlloc(ts: i64) ![]u8 {
     if (ts < 0) return try std.fmt.allocPrint(std.heap.page_allocator, "-", .{});
-    var tm: c.struct_tm = undefined;
-    if (!localtimeCompat(ts, &tm)) {
-        return try std.fmt.allocPrint(std.heap.page_allocator, "-", .{});
-    }
+    const dt = time_util.fromTimestamp(ts);
 
-    const year = @as(u32, @intCast(tm.tm_year + 1900));
-    const month = @as(u32, @intCast(tm.tm_mon + 1));
-    const day = @as(u32, @intCast(tm.tm_mday));
-    const hour = @as(u32, @intCast(tm.tm_hour));
-    const min = @as(u32, @intCast(tm.tm_min));
-    const sec = @as(u32, @intCast(tm.tm_sec));
-
-    return std.fmt.allocPrint(
-        std.heap.page_allocator,
-        "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}",
-        .{ year, month, day, hour, min, sec },
-    );
+    return std.fmt.allocPrint(std.heap.page_allocator, "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}", .{
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour,
+        dt.minute,
+        dt.second,
+    });
 }
 
 test "printTableRow handles long cells without underflow" {
     var buffer: [256]u8 = undefined;
-    var writer: std.Io.Writer = .fixed(&buffer);
+    var writer: std.io.AnyWriter = .fixed(&buffer);
     const widths = [_]usize{3};
     const cells = [_][]const u8{"abcdef"};
     try printTableRow(&writer, &widths, &cells);

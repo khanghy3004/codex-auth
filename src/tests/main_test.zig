@@ -10,7 +10,7 @@ fn makeRegistry() registry.Registry {
         .active_account_activated_at_ms = null,
         .auto_switch = registry.defaultAutoSwitchConfig(),
         .api = registry.defaultApiConfig(),
-        .accounts = std.ArrayList(registry.AccountRecord).empty,
+        .accounts = .{},
     };
 }
 
@@ -90,9 +90,9 @@ test "Scenario: Given foreground commands when checking reconcile policy then co
         .threshold_weekly_percent = null,
     } } } }));
     try std.testing.expect(main_mod.shouldReconcileManagedService(.{ .config = .{ .api_usage = .enable } }));
-    try std.testing.expect(!main_mod.shouldReconcileManagedService(.{ .help = {} }));
-    try std.testing.expect(!main_mod.shouldReconcileManagedService(.{ .status = {} }));
-    try std.testing.expect(!main_mod.shouldReconcileManagedService(.{ .version = {} }));
+    try std.testing.expect(!main_mod.shouldReconcileManagedService(.help));
+    try std.testing.expect(!main_mod.shouldReconcileManagedService(.status));
+    try std.testing.expect(!main_mod.shouldReconcileManagedService(.version));
     try std.testing.expect(!main_mod.shouldReconcileManagedService(.{ .daemon = .{ .mode = .once } }));
 }
 

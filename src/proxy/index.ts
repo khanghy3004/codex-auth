@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { PassThrough } from 'node:stream';
-import { AccountManager } from './manager';
+import { AccountManager, AccountInfo } from './manager';
 import { OpenAIProvider, GenericOpenAIProvider, ProviderResponse } from './providers';
 import { AxiosError } from 'axios';
 
@@ -23,43 +23,48 @@ app.post('/v1/responses', async (req: Request, res: Response) => {
   await handleProxyRequest(req, res);
 });
 
+app.post('/v1/completions', async (req: Request, res: Response) => {
+  await handleProxyRequest(req, res);
+});
+
 async function handleProxyRequest(req: Request, res: Response) {
   let attempts = 0;
-  const maxAttempts = 10; // Increased because there are more providers
+  const maxAttempts = 5;
 
   while (attempts < maxAttempts) {
     const account = accountManager.getNextAvailableAccount();
     if (!account) {
-      res.status(402).json({ error: 'All accounts and providers are exhausted.' });
+      res.status(402).json({ error: 'All providers are exhausted.' });
       return;
     }
 
     try {
       const model = req.body.model || 'unknown-model';
-      console.log(`[Proxy] [${account.type}] [${account.email}] [Model: ${model}] (Attempt ${attempts + 1})`);
+      console.log(`[Proxy] [${account.type}] [${account.email}] [Model: ${model}]`);
       
-      let relativePath = req.path.startsWith('/v1') ? req.path.slice(3) : req.path;
+      const relativePath = req.path.startsWith('/v1') ? req.path.slice(3) : req.path;
+      const isNative = relativePath === '/responses' || relativePath === '/response' || relativePath === '/conversation';
+      const format = isNative ? 'native' : 'openai';
 
       let response: ProviderResponse;
       if (account.type === 'chatgpt') {
-        response = await openaiProvider.forward(req.body, account, relativePath, req.headers);
+        const provider = new OpenAIProvider(format);
+        response = await provider.forward(req.body, account, relativePath, req.headers);
       } else {
         const body = { ...req.body };
-        // For standard OpenAI/OpenRouter providers, ask for usage in the stream
         if (body.stream) {
           body.stream_options = { include_usage: true };
         }
-        
-        const custom = new GenericOpenAIProvider(account.email, account.baseUrl!, account.access_token!);
-        response = await custom.forward(body, account, relativePath, req.headers);
+        const provider = new GenericOpenAIProvider(account.email, account.baseUrl!, account.access_token!, format);
+        response = await provider.forward(body, account, relativePath, req.headers);
       }
 
-      // Handle streaming response
       if (response.data && typeof response.data.pipe === 'function') {
-        // Ensure SSE headers are set correctly for streaming
-        res.setHeader('Content-Type', 'text/event-stream');
+        const contentType = format === 'native' ? 'application/json' : 'text/event-stream';
+        res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
 
         for (const [key, value] of Object.entries(response.headers)) {
           if (value !== undefined && !['content-type', 'cache-control', 'connection', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())) {
@@ -67,79 +72,81 @@ async function handleProxyRequest(req: Request, res: Response) {
           }
         }
         
-        // Use PassThrough as a middleman to observe the stream without affecting the main pipe
-        const observer = new PassThrough();
         let totalUsage: any = null;
+        let buffer = '';
         
-        observer.on('data', (chunk: any) => {
-          const content = chunk.toString();
-          const lines = content.split('\n');
+        // Search headers for usage (some providers like OpenRouter or LiteLLM might send it here)
+        const usageHeaders = ['x-usage', 'openai-usage', 'x-tokens-used'];
+        for (const h of usageHeaders) {
+           if (response.headers[h]) {
+              try {
+                const parseH = typeof response.headers[h] === 'string' ? JSON.parse(response.headers[h]) : response.headers[h];
+                totalUsage = totalUsage || parseH;
+              } catch {}
+           }
+        }
+
+        response.data.on('data', (chunk: any) => {
+          const chunkStr = chunk.toString();
+          buffer += chunkStr;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
-               const dataStr = line.slice(6).trim();
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            
+            let data: any = null;
+            if (trimmed.startsWith('data: ')) {
+               const dataStr = trimmed.slice(6).trim();
                if (dataStr === '[DONE]') continue;
-               try {
-                 const data = JSON.parse(dataStr);
-                 if (data.usage) {
-                   totalUsage = data.usage;
-                 }
-               } catch {}
+               try { data = JSON.parse(dataStr); } catch {}
+            } else {
+               try { data = JSON.parse(trimmed); } catch {}
+            }
+            if (!data) continue;
+
+            if (data.usage) {
+               totalUsage = data.usage;
+            } else if (data.response && data.response.usage) {
+               totalUsage = data.response.usage;
+            } else if (data.input_tokens || data.prompt_tokens) {
+               totalUsage = totalUsage || {};
+               totalUsage.prompt_tokens = data.prompt_tokens || data.input_tokens;
+               totalUsage.completion_tokens = data.completion_tokens || data.output_tokens;
+               totalUsage.total_tokens = data.total_tokens || ((totalUsage.prompt_tokens || 0) + (totalUsage.completion_tokens || 0));
+            } else if (data.response && data.response.status_details && data.response.status_details.usage) {
+               totalUsage = data.response.status_details.usage;
             }
           }
         });
 
-        observer.on('end', () => {
+        response.data.on('end', () => {
           if (totalUsage) {
-            console.log(`[Proxy] Usage: prompts=${totalUsage.prompt_tokens}, completion=${totalUsage.completion_tokens}, total=${totalUsage.total_tokens}`);
-          } else {
-             // If still no usage found, it might be in a different format or missing
-             console.log(`[Proxy] Usage: (No usage reported in stream)`);
+            const p = totalUsage.prompt_tokens || totalUsage.input_tokens;
+            const c = totalUsage.completion_tokens || totalUsage.output_tokens;
+            const t = totalUsage.total_tokens || (p + (c || 0));
+            console.log(`[Proxy] Usage: prompts=${p}, completion=${c}, total=${t}`);
           }
         });
 
-        // Single chain pipeline
-        response.data.pipe(observer).pipe(res);
-
-        // Handle client disconnect
-        req.on('close', () => {
-          response.data.destroy();
-          observer.destroy();
-        });
-
+        response.data.pipe(res);
+        req.on('close', () => response.data.destroy());
         return;
       } else {
-        if (response.data.usage) {
-          const u = response.data.usage;
-          console.log(`[Proxy] Usage: prompts=${u.prompt_tokens}, completion=${u.completion_tokens}, total=${u.total_tokens}`);
-        }
         res.status(response.status).json(response.data);
         return;
       }
     } catch (error) {
-      if (openaiProvider.isQuotaExhausted(error)) {
-        console.warn(`[Proxy] Account ${account.email} exhausted. Retrying...`);
-        accountManager.markExhausted(account.account_key);
+      if (openaiProvider.isQuotaExhausted(error) || (error instanceof AxiosError && error.response?.status === 403)) {
+        accountManager.markExhausted(account.account_key, 20);
         attempts++;
-      } else if (error instanceof AxiosError) {
-        const status = error.response?.status || 500;
-        const data = error.response?.data;
-        
-        console.error(`[Proxy] Provider Error (${status}): ${error.message}`);
-        
-        if (data && typeof data.pipe === 'function') {
-          // If it's a stream error, it's hard to read and return at the same time without losing data,
-          // but we can try to log the error message from the Axios error object.
-          res.status(status).json({ error: error.message, status: status });
-        } else {
-          console.error(`[Proxy] Error Body:`, JSON.stringify(data).slice(0, 1000));
-          res.status(status).json(data || { error: error.message });
-        }
-        return;
-      } else {
-        console.error(`[Proxy] Unexpected error:`, error);
-        res.status(500).json({ error: 'Internal Server Error' });
-        return;
+        continue;
       }
+
+      const status = (error instanceof AxiosError) ? (error.response?.status || 500) : 500;
+      const data = (error instanceof AxiosError) ? error.response?.data : null;
+      res.status(status).json(data || { error: (error as Error).message });
+      return;
     }
   }
 

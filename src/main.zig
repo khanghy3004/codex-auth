@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const cli = @import("cli.zig");
 const registry = @import("registry.zig");
 const auth = @import("auth.zig");
@@ -63,7 +64,8 @@ fn isHandledCliError(err: anyerror) bool {
 }
 
 pub fn shouldReconcileManagedService(cmd: cli.Command) bool {
-    if (std.process.hasNonEmptyEnvVarConstant(skip_service_reconcile_env)) return false;
+    const skip = if (comptime builtin.os.tag == .windows) false else (std.posix.getenv(skip_service_reconcile_env) != null);
+    if (skip) return false;
     return switch (cmd) {
         .help, .version, .status, .daemon => false,
         else => true,
@@ -175,12 +177,13 @@ fn handleList(allocator: std.mem.Allocator, codex_home: []const u8, opts: cli.Li
         }
     }
     try maybeRefreshForegroundUsage(allocator, codex_home, &reg, .list);
-    try format.printAccounts(allocator, &reg, .table);
+    var providers_cfg = try registry.loadProviders(allocator, codex_home);
+    defer providers_cfg.deinit(allocator);
+    try format.printAccounts(allocator, &reg, &providers_cfg, .table);
 }
 
 fn handleLogin(allocator: std.mem.Allocator, codex_home: []const u8, opts: cli.LoginOptions) !void {
     cli.warnDeprecatedLoginAlias(opts);
-    try cli.runCodexLogin(allocator);
     const auth_path = try registry.activeAuthPath(allocator, codex_home);
     defer allocator.free(auth_path);
 
@@ -267,6 +270,7 @@ fn handleConfig(allocator: std.mem.Allocator, codex_home: []const u8, opts: cli.
     switch (opts) {
         .auto_switch => |auto_opts| try auto.handleAutoCommand(allocator, codex_home, auto_opts),
         .api_usage => |action| try auto.handleApiUsageCommand(allocator, codex_home, action),
+        .provider => |action| try auto.handleProviderCommand(allocator, codex_home, action),
     }
 }
 
@@ -278,8 +282,8 @@ pub fn findMatchingAccounts(
     allocator: std.mem.Allocator,
     reg: *registry.Registry,
     query: []const u8,
-) !std.ArrayList(usize) {
-    var matches = std.ArrayList(usize).empty;
+) !std.ArrayListUnmanaged(usize) {
+    var matches = std.ArrayListUnmanaged(usize){};
     for (reg.accounts.items, 0..) |*rec, idx| {
         if (std.ascii.indexOfIgnoreCase(rec.email, query) != null or
             (rec.alias.len != 0 and std.ascii.indexOfIgnoreCase(rec.alias, query) != null))
@@ -404,7 +408,7 @@ fn handleRemove(allocator: std.mem.Allocator, codex_home: []const u8, opts: cli.
                 freeOwnedStrings(allocator, matched_labels.items);
                 matched_labels.deinit(allocator);
             }
-            if (!std.fs.File.stdin().isTty()) {
+            if (!std.io.getStdIn().isTty()) {
                 try cli.printRemoveConfirmationUnavailableError(matched_labels.items);
                 return error.RemoveConfirmationUnavailable;
             }
@@ -482,9 +486,7 @@ fn handleHelp(allocator: std.mem.Allocator, codex_home: []const u8) !void {
 
 fn handleClean(allocator: std.mem.Allocator, codex_home: []const u8) !void {
     const summary = try registry.cleanAccountsBackups(allocator, codex_home);
-    var stdout: [256]u8 = undefined;
-    var writer = std.fs.File.stdout().writer(&stdout);
-    const out = &writer.interface;
+    const out = std.io.getStdOut().writer().any();
     try out.print(
         "cleaned accounts: auth_backups={d}, registry_backups={d}, stale_entries={d}\n",
         .{
@@ -493,7 +495,6 @@ fn handleClean(allocator: std.mem.Allocator, codex_home: []const u8) !void {
             summary.stale_snapshot_files_removed,
         },
     );
-    try out.flush();
 }
 
 // Tests live in separate files but are pulled in by main.zig for zig test.

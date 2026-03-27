@@ -1,8 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const c_time = @cImport({
-    @cInclude("time.h");
-});
+const time_util = @import("time_util.zig");
 const cli = @import("cli.zig");
 const io_util = @import("io_util.zig");
 const registry = @import("registry.zig");
@@ -56,8 +54,8 @@ const CandidateEntry = struct {
 };
 
 const CandidateIndex = struct {
-    heap: std.ArrayListUnmanaged(CandidateEntry) = .empty,
-    positions: std.StringHashMapUnmanaged(usize) = .empty,
+    heap: std.ArrayListUnmanaged(CandidateEntry) = .{},
+    positions: std.StringHashMapUnmanaged(usize) = .{},
     next_score_change_at: ?i64 = null,
 
     fn deinit(self: *CandidateIndex, allocator: std.mem.Allocator) void {
@@ -178,8 +176,8 @@ const CandidateIndex = struct {
         self.next_score_change_at = next_score_change_at;
     }
 
-    fn orderedKeys(self: *const CandidateIndex, allocator: std.mem.Allocator) !std.ArrayList([]const u8) {
-        var ordered = try std.ArrayList([]const u8).initCapacity(allocator, self.heap.items.len);
+    fn orderedKeys(self: *const CandidateIndex, allocator: std.mem.Allocator) !std.ArrayListUnmanaged([]const u8) {
+        var ordered = try std.ArrayListUnmanaged([]const u8).initCapacity(allocator, self.heap.items.len);
         for (self.heap.items) |entry| {
             try ordered.append(allocator, entry.account_key);
         }
@@ -247,8 +245,8 @@ pub const DaemonRefreshState = struct {
     registry_mtime_ns: i128 = 0,
     auth_mtime_ns: i128 = 0,
     candidate_index: CandidateIndex = .{},
-    candidate_check_times: std.StringHashMapUnmanaged(i128) = .empty,
-    candidate_rejections: std.StringHashMapUnmanaged(bool) = .empty,
+    candidate_check_times: std.StringHashMapUnmanaged(i128) = .{},
+    candidate_rejections: std.StringHashMapUnmanaged(bool) = .{},
     rollout_scan_cache: sessions.RolloutScanCache = .{},
 
     pub fn deinit(self: *DaemonRefreshState, allocator: std.mem.Allocator) void {
@@ -361,9 +359,9 @@ pub const DaemonRefreshState = struct {
 
         self.candidate_index.deinit(allocator);
         self.candidate_check_times.deinit(allocator);
-        self.candidate_check_times = .empty;
+        self.candidate_check_times = .{};
         self.candidate_rejections.deinit(allocator);
-        self.candidate_rejections = .empty;
+        self.candidate_rejections = .{};
         if (self.current_reg) |*reg| {
             reg.deinit(allocator);
         }
@@ -376,9 +374,9 @@ pub const DaemonRefreshState = struct {
         if (self.current_reg == null) return;
         self.candidate_index.deinit(allocator);
         self.candidate_check_times.deinit(allocator);
-        self.candidate_check_times = .empty;
+        self.candidate_check_times = .{};
         self.candidate_rejections.deinit(allocator);
-        self.candidate_rejections = .empty;
+        self.candidate_rejections = .{};
         try self.candidate_index.rebuild(allocator, &self.current_reg.?, std.time.timestamp());
     }
 
@@ -494,7 +492,7 @@ pub fn helpStateLabel(enabled: bool) []const u8 {
 }
 
 fn colorEnabled() bool {
-    return std.fs.File.stdout().isTty();
+    return std.io.getStdOut().isTty();
 }
 
 pub fn printStatus(allocator: std.mem.Allocator, codex_home: []const u8) !void {
@@ -516,11 +514,11 @@ pub fn getStatus(allocator: std.mem.Allocator, codex_home: []const u8) !Status {
     };
 }
 
-pub fn writeStatus(out: *std.Io.Writer, status: Status) !void {
+pub fn writeStatus(out: std.io.AnyWriter, status: Status) !void {
     try writeStatusWithColor(out, status, false);
 }
 
-fn writeStatusWithColor(out: *std.Io.Writer, status: Status, use_color: bool) !void {
+fn writeStatusWithColor(out: std.io.AnyWriter, status: Status, use_color: bool) !void {
     _ = use_color;
     try out.writeAll("auto-switch: ");
     try out.writeAll(helpStateLabel(status.enabled));
@@ -541,22 +539,20 @@ fn writeStatusWithColor(out: *std.Io.Writer, status: Status, use_color: bool) !v
     try out.writeAll(if (status.api_usage_enabled) "api" else "local");
     try out.writeAll("\n");
 
-    try out.flush();
 }
 
 pub fn writeAutoSwitchLogLine(
-    out: *std.Io.Writer,
+    out: std.io.AnyWriter,
     from: *const registry.AccountRecord,
     to: *const registry.AccountRecord,
 ) !void {
     try out.print("[switch] {s} -> {s}\n", .{ from.email, to.email });
-    try out.flush();
 }
 
 fn emitAutoSwitchLog(from: *const registry.AccountRecord, to: *const registry.AccountRecord) void {
-    var stderr_buffer: [256]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&stderr_buffer);
-    writeAutoSwitchLogLine(&writer.interface, from, to) catch {};
+    var bw = std.io.bufferedWriter(std.io.getStdErr().writer());
+    writeAutoSwitchLogLine(bw.writer().any(), from, to) catch {};
+    bw.flush() catch {};
 }
 
 const DaemonLogPriority = enum {
@@ -569,10 +565,10 @@ const DaemonLogPriority = enum {
 
 fn emitDaemonLog(priority: DaemonLogPriority, comptime fmt: []const u8, args: anytype) void {
     _ = priority;
-    var stderr_buffer: [512]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&stderr_buffer);
-    writer.interface.print(fmt ++ "\n", args) catch {};
-    writer.interface.flush() catch {};
+    var bw = std.io.bufferedWriter(std.io.getStdErr().writer());
+    const writer = bw.writer();
+    writer.any().print(fmt ++ "\n", args) catch {};
+    bw.flush() catch {};
 }
 
 fn emitTaggedDaemonLog(
@@ -582,11 +578,11 @@ fn emitTaggedDaemonLog(
     args: anytype,
 ) void {
     _ = priority;
-    var stderr_buffer: [1024]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&stderr_buffer);
-    writer.interface.print("[{s}] ", .{tag}) catch {};
-    writer.interface.print(fmt ++ "\n", args) catch {};
-    writer.interface.flush() catch {};
+    var bw = std.io.bufferedWriter(std.io.getStdErr().writer());
+    const writer = bw.writer();
+    writer.any().print("[{s}] ", .{tag}) catch {};
+    writer.any().print(fmt ++ "\n", args) catch {};
+    bw.flush() catch {};
 }
 
 fn percentLabel(buf: *[5]u8, value: ?i64) []const u8 {
@@ -596,22 +592,14 @@ fn percentLabel(buf: *[5]u8, value: ?i64) []const u8 {
 }
 
 fn localDateTimeLabel(buf: *[19]u8, timestamp_ms: i64) []const u8 {
-    const seconds = @divTrunc(timestamp_ms, std.time.ms_per_s);
-    var tm: c_time.struct_tm = undefined;
-    if (!localtimeCompat(seconds, &tm)) return "-";
-    const year: u32 = @intCast(tm.tm_year + 1900);
-    const month: u32 = @intCast(tm.tm_mon + 1);
-    const day: u32 = @intCast(tm.tm_mday);
-    const hour: u32 = @intCast(tm.tm_hour);
-    const minute: u32 = @intCast(tm.tm_min);
-    const second: u32 = @intCast(tm.tm_sec);
+    const dt = time_util.fromTimestamp(@divTrunc(timestamp_ms, std.time.ms_per_s));
     return std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}", .{
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour,
+        dt.minute,
+        dt.second,
     }) catch "-";
 }
 
@@ -620,29 +608,6 @@ fn rolloutFileLabel(buf: *[96]u8, path: []const u8) []const u8 {
     return std.fmt.bufPrint(buf, "{s}", .{basename}) catch basename;
 }
 
-fn localtimeCompat(ts: i64, out_tm: *c_time.struct_tm) bool {
-    if (comptime builtin.os.tag == .windows) {
-        if (comptime @hasDecl(c_time, "_localtime64_s") and @hasDecl(c_time, "__time64_t")) {
-            var t64 = std.math.cast(c_time.__time64_t, ts) orelse return false;
-            return c_time._localtime64_s(out_tm, &t64) == 0;
-        }
-        return false;
-    }
-
-    var t = std.math.cast(c_time.time_t, ts) orelse return false;
-    if (comptime @hasDecl(c_time, "localtime_r")) {
-        return c_time.localtime_r(&t, out_tm) != null;
-    }
-
-    if (comptime @hasDecl(c_time, "localtime")) {
-        const tm_ptr = c_time.localtime(&t);
-        if (tm_ptr == null) return false;
-        out_tm.* = tm_ptr.*;
-        return true;
-    }
-
-    return false;
-}
 
 fn windowDurationLabel(buf: *[16]u8, window_minutes: ?i64) []const u8 {
     const minutes = window_minutes orelse return "unlabeled";
@@ -733,6 +698,15 @@ pub fn handleApiUsageCommand(allocator: std.mem.Allocator, codex_home: []const u
     try registry.saveRegistry(allocator, codex_home, &reg);
 }
 
+pub fn handleProviderCommand(allocator: std.mem.Allocator, codex_home: []const u8, action: cli.ApiUsageAction) !void {
+    var reg = try registry.loadRegistry(allocator, codex_home);
+    defer reg.deinit(allocator);
+    const enabled = action == .enable;
+    reg.auto_switch.provider = enabled;
+    try registry.saveRegistry(allocator, codex_home, &reg);
+    try registry.updateCodexConfigToml(allocator, codex_home, enabled);
+}
+
 pub fn shouldEnsureManagedService(enabled: bool, runtime: RuntimeState, definition_matches: bool) bool {
     if (!enabled) return false;
     return runtime != .running or !definition_matches;
@@ -782,7 +756,7 @@ pub fn runDaemon(allocator: std.mem.Allocator, codex_home: []const u8) !void {
             break :blk true;
         };
         if (!keep_running) return;
-        std.Thread.sleep(watch_poll_interval_ns);
+        std.time.sleep(watch_poll_interval_ns);
     }
 }
 
@@ -1211,7 +1185,7 @@ pub fn maybeAutoSwitchForDaemonWithUsageFetcher(
     }
 
     if (reg.api.usage) {
-        var skipped_candidates = std.ArrayListUnmanaged([]const u8).empty;
+        var skipped_candidates = std.ArrayListUnmanaged([]const u8){};
         defer skipped_candidates.deinit(allocator);
         const validation = try refreshDaemonSwitchCandidatesWithUsageFetcher(
             allocator,
@@ -1713,7 +1687,6 @@ fn printAutoEnableUsageNote(api_enabled: bool) !void {
         try out.writeAll("auto-switch enabled; usage mode: local-only (switching still works, but candidate validation is less accurate)\n");
         try out.writeAll("Tip: run `codex-auth-proxy config api enable` for the most accurate switching decisions.\n");
     }
-    try out.flush();
 }
 
 fn disable(allocator: std.mem.Allocator, codex_home: []const u8) !void {
@@ -2251,7 +2224,7 @@ fn runIgnoringFailure(allocator: std.mem.Allocator, argv: []const []const u8) vo
 }
 
 fn escapeXml(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
-    var out = std.ArrayList(u8).empty;
+    var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
     for (raw) |ch| {
         switch (ch) {
@@ -2267,7 +2240,7 @@ fn escapeXml(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
 }
 
 fn escapeSystemdValue(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
-    var out = std.ArrayList(u8).empty;
+    var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
     for (raw) |ch| {
         switch (ch) {

@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import { spawn } from 'node:child_process';
 import { AccountInfo } from './manager';
 
 export interface ProviderResponse {
@@ -14,6 +15,12 @@ export abstract class Provider {
 
 export class OpenAIProvider extends Provider {
   private baseUrl: string = 'https://chatgpt.com/backend-api';
+  private format: string;
+
+  constructor(format: string = 'openai') {
+    super();
+    this.format = format;
+  }
 
   async forward(requestData: any, account: AccountInfo, _path: string, _headers: any): Promise<ProviderResponse> {
     const { access_token, chatgpt_account_id } = account;
@@ -23,17 +30,23 @@ export class OpenAIProvider extends Provider {
     }
 
     try {
+      const headers: any = {
+        'Authorization': `Bearer ${access_token}`,
+        'OpenAI-Account-Id': chatgpt_account_id,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/event-stream'
+      };
+
+      if (account.cookies) {
+        headers['Cookie'] = account.cookies;
+      }
+
       const response = await axios({
         method: 'POST',
         url: `${this.baseUrl}/conversation`,
         data: requestData,
-        headers: {
-          'Authorization': `Bearer ${access_token}`,
-          'ChatGPT-Account-Id': chatgpt_account_id,
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/event-stream'
-        },
+        headers,
         responseType: 'stream'
       });
 
@@ -62,18 +75,18 @@ export class GenericOpenAIProvider extends Provider {
   private name: string;
   private baseUrl: string;
   private apiKey: string;
+  private format: string;
 
-  constructor(name: string, baseUrl: string, apiKey: string) {
+  constructor(name: string, baseUrl: string, apiKey: string, format: string = 'openai') {
     super();
     this.name = name;
-    // Don't strip /v1, just ensure no trailing slash
     this.baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     this.apiKey = apiKey;
+    this.format = format;
   }
 
   async forward(requestData: any, _account: AccountInfo, path: string, headers: any): Promise<ProviderResponse> {
     try {
-      // Forward headers but replace Authorization and Host
       const forwardHeaders = { ...headers };
       delete forwardHeaders.host;
       delete forwardHeaders.connection;

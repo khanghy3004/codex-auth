@@ -1182,12 +1182,12 @@ test "Scenario: Given automatic switch when writing daemon log then it records s
     try bdd.appendAccount(gpa, &reg, "from@example.com", "work", null);
     try bdd.appendAccount(gpa, &reg, "to@example.com", "personal", null);
 
-    var aw: std.Io.Writer.Allocating = .init(gpa);
+    var aw = std.ArrayList(u8).init(gpa);
     defer aw.deinit();
 
-    try auto.writeAutoSwitchLogLine(&aw.writer, &reg.accounts.items[0], &reg.accounts.items[1]);
+    try auto.writeAutoSwitchLogLine(aw.writer().any(), &reg.accounts.items[0], &reg.accounts.items[1]);
 
-    const output = aw.written();
+    const output = aw.items;
     try std.testing.expect(std.mem.eql(u8, output, "[switch] from@example.com -> to@example.com\n"));
 }
 
@@ -1225,10 +1225,10 @@ test "Scenario: Given windows task state output when parsing then localized text
 
 test "Scenario: Given status when rendering then auto and usage api settings are shown" {
     const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
+    var aw = std.ArrayList(u8).init(gpa);
     defer aw.deinit();
 
-    try auto.writeStatus(&aw.writer, .{
+    try auto.writeStatus(aw.writer().any(), .{
         .enabled = true,
         .runtime = .running,
         .threshold_5h_percent = 12,
@@ -1236,7 +1236,7 @@ test "Scenario: Given status when rendering then auto and usage api settings are
         .api_usage_enabled = false,
     });
 
-    const output = aw.written();
+    const output = aw.items;
     try std.testing.expect(std.mem.indexOf(u8, output, "auto-switch: ON") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "service: running") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "thresholds: 5h<12%, weekly<8%") != null);
@@ -1246,10 +1246,10 @@ test "Scenario: Given status when rendering then auto and usage api settings are
 
 test "Scenario: Given api usage mode when rendering status body then risk warning stays off stdout" {
     const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
+    var aw = std.ArrayList(u8).init(gpa);
     defer aw.deinit();
 
-    try auto.writeStatus(&aw.writer, .{
+    try auto.writeStatus(aw.writer().any(), .{
         .enabled = true,
         .runtime = .running,
         .threshold_5h_percent = 12,
@@ -1257,7 +1257,7 @@ test "Scenario: Given api usage mode when rendering status body then risk warnin
         .api_usage_enabled = true,
     });
 
-    const output = aw.written();
+    const output = aw.items;
     try std.testing.expect(std.mem.indexOf(u8, output, "usage: api") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "Warning: Usage refresh is currently using the ChatGPT usage API") == null);
     try std.testing.expect(std.mem.indexOf(u8, output, "`codex-auth-proxy config api disable`") == null);

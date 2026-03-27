@@ -87,7 +87,7 @@ fn makeEmptyRegistry() registry.Registry {
         .active_account_activated_at_ms = null,
         .auto_switch = registry.defaultAutoSwitchConfig(),
         .api = registry.defaultApiConfig(),
-        .accounts = std.ArrayList(registry.AccountRecord).empty,
+        .accounts = .{},
     };
 }
 

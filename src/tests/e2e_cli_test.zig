@@ -66,10 +66,10 @@ fn runCliWithIsolatedHome(
     const exe_path = try builtCliPathAlloc(allocator, project_root);
     defer allocator.free(exe_path);
 
-    var argv = std.ArrayList([]const u8).empty;
-    defer argv.deinit(allocator);
-    try argv.append(allocator, exe_path);
-    try argv.appendSlice(allocator, args);
+    var argv = std.ArrayList([]const u8).init(allocator);
+    defer argv.deinit();
+    try argv.append(exe_path);
+    try argv.appendSlice(args);
 
     var env_map = try std.process.getEnvMap(allocator);
     defer env_map.deinit();
@@ -96,10 +96,10 @@ fn runCliWithIsolatedHomeAndStdin(
     const exe_path = try builtCliPathAlloc(allocator, project_root);
     defer allocator.free(exe_path);
 
-    var argv = std.ArrayList([]const u8).empty;
-    defer argv.deinit(allocator);
-    try argv.append(allocator, exe_path);
-    try argv.appendSlice(allocator, args);
+    var argv = std.ArrayList([]const u8).init(allocator);
+    defer argv.deinit();
+    try argv.append(exe_path);
+    try argv.appendSlice(args);
 
     var env_map = try std.process.getEnvMap(allocator);
     defer env_map.deinit();
@@ -114,10 +114,10 @@ fn runCliWithIsolatedHomeAndStdin(
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
 
-    var stdout = std.ArrayList(u8).empty;
-    defer stdout.deinit(allocator);
-    var stderr = std.ArrayList(u8).empty;
-    defer stderr.deinit(allocator);
+    var stdout = std.ArrayList(u8).init(allocator);
+    defer stdout.deinit();
+    var stderr = std.ArrayList(u8).init(allocator);
+    defer stderr.deinit();
 
     try child.spawn();
     errdefer {
@@ -130,11 +130,11 @@ fn runCliWithIsolatedHomeAndStdin(
         child.stdin = null;
     }
 
-    try child.collectOutput(allocator, &stdout, &stderr, 1024 * 1024);
+    try child.collectOutput(&stdout, &stderr, 1024 * 1024);
 
     return .{
-        .stdout = try stdout.toOwnedSlice(allocator),
-        .stderr = try stderr.toOwnedSlice(allocator),
+        .stdout = try stdout.toOwnedSlice(),
+        .stderr = try stderr.toOwnedSlice(),
         .term = try child.wait(),
     };
 }

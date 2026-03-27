@@ -223,10 +223,10 @@ pub fn convertCpaAuthJson(allocator: std.mem.Allocator, data: []const u8) ![]u8 
     const refresh_token = jsonStringField(obj, "refresh_token") orelse return error.MissingRefreshToken;
     if (refresh_token.len == 0) return error.MissingRefreshToken;
 
-    var out: std.Io.Writer.Allocating = .init(allocator);
+    var out = std.ArrayList(u8).init(allocator);
     errdefer out.deinit();
 
-    try std.json.Stringify.value(StandardAuthJson{
+    try std.json.stringify(StandardAuthJson{
         .auth_mode = "chatgpt",
         .OPENAI_API_KEY = null,
         .tokens = .{
@@ -236,8 +236,8 @@ pub fn convertCpaAuthJson(allocator: std.mem.Allocator, data: []const u8) ![]u8 
             .account_id = jsonStringFieldOrDefault(obj, "account_id"),
         },
         .last_refresh = jsonStringFieldOrDefault(obj, "last_refresh"),
-    }, .{ .whitespace = .indent_2 }, &out.writer);
-    try out.writer.writeAll("\n");
+    }, .{ .whitespace = .indent_2 }, out.writer());
+    try out.writer().writeAll("\n");
     return try out.toOwnedSlice();
 }
 

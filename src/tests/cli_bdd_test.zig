@@ -139,7 +139,7 @@ test "Scenario: Given login with unknown flag when parsing then help command is 
 
 test "Scenario: Given help when rendering then login and compatibility notes are shown" {
     const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
+    var aw = std.ArrayList(u8).init(gpa);
     defer aw.deinit();
     var auto_cfg = registry.defaultAutoSwitchConfig();
     var api_cfg = registry.defaultApiConfig();
@@ -148,9 +148,9 @@ test "Scenario: Given help when rendering then login and compatibility notes are
     auto_cfg.threshold_weekly_percent = 8;
     api_cfg.usage = true;
 
-    try cli.writeHelp(&aw.writer, false, &auto_cfg, &api_cfg);
+    try cli.writeHelp(aw.writer().any(), false, &auto_cfg, &api_cfg);
 
-    const help = aw.written();
+    const help = aw.items;
     try std.testing.expect(std.mem.indexOf(u8, help, "Auto Switch: ON (5h<12%, weekly<8%)") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "Usage API: ON (api)") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "--cpa [<path>]") != null);
@@ -176,9 +176,9 @@ test "Scenario: Given help when rendering then login and compatibility notes are
 
 test "Scenario: Given scanned import report when rendering then stdout and stderr match the import format" {
     const gpa = std.testing.allocator;
-    var stdout_aw: std.Io.Writer.Allocating = .init(gpa);
+    var stdout_aw = std.ArrayList(u8).init(gpa);
     defer stdout_aw.deinit();
-    var stderr_aw: std.Io.Writer.Allocating = .init(gpa);
+    var stderr_aw = std.ArrayList(u8).init(gpa);
     defer stderr_aw.deinit();
 
     var report = registry.ImportReport.init(.scanned);
@@ -188,41 +188,41 @@ test "Scenario: Given scanned import report when rendering then stdout and stder
     try report.addEvent(gpa, "token_jane.smith.alpha@email.com", .updated, null);
     try report.addEvent(gpa, "token_invalid", .skipped, "MalformedJson");
 
-    try cli.writeImportReport(&stdout_aw.writer, &stderr_aw.writer, &report);
+    try cli.writeImportReport(stdout_aw.writer().any(), stderr_aw.writer().any(), &report);
 
     try std.testing.expectEqualStrings(
         "Scanning ./tokens/...\n" ++
             "  ✓ imported  token_ryan.taylor.alpha@email.com\n" ++
             "  ✓ updated   token_jane.smith.alpha@email.com\n" ++
             "Import Summary: 1 imported, 1 updated, 1 skipped (total 3 files)\n",
-        stdout_aw.written(),
+        stdout_aw.items,
     );
     try std.testing.expectEqualStrings(
         "  ✗ skipped   token_invalid: MalformedJson\n",
-        stderr_aw.written(),
+        stderr_aw.items,
     );
 }
 
 test "Scenario: Given single-file skipped import report when rendering then summary stays concise" {
     const gpa = std.testing.allocator;
-    var stdout_aw: std.Io.Writer.Allocating = .init(gpa);
+    var stdout_aw = std.ArrayList(u8).init(gpa);
     defer stdout_aw.deinit();
-    var stderr_aw: std.Io.Writer.Allocating = .init(gpa);
+    var stderr_aw = std.ArrayList(u8).init(gpa);
     defer stderr_aw.deinit();
 
     var report = registry.ImportReport.init(.single_file);
     defer report.deinit(gpa);
     try report.addEvent(gpa, "token_bob.wilson.alpha@email.com", .skipped, "MissingEmail");
 
-    try cli.writeImportReport(&stdout_aw.writer, &stderr_aw.writer, &report);
+    try cli.writeImportReport(stdout_aw.writer().any(), stderr_aw.writer().any(), &report);
 
     try std.testing.expectEqualStrings(
         "Import Summary: 0 imported, 1 skipped\n",
-        stdout_aw.written(),
+        stdout_aw.items,
     );
     try std.testing.expectEqualStrings(
         "  ✗ skipped   token_bob.wilson.alpha@email.com: MissingEmail\n",
-        stderr_aw.written(),
+        stderr_aw.items,
     );
 }
 
@@ -472,41 +472,17 @@ test "Scenario: Given daemon once when parsing then one-shot daemon command is p
 
 test "Scenario: Given deprecated add alias warning when rendering then colorized replacement is included" {
     const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
+    var aw = std.ArrayList(u8).init(gpa);
     defer aw.deinit();
 
-    try cli.writeDeprecatedLoginAliasWarningTo(&aw.writer, "codex-auth-proxy login", true);
+    try cli.writeDeprecatedLoginAliasWarningTo(aw.writer().any(), "codex-auth-proxy login", true);
 
-    const warning = aw.written();
+    const warning = aw.items;
     try std.testing.expect(std.mem.indexOf(u8, warning, "\x1b[1;31mwarning:\x1b[0m") != null);
     try std.testing.expect(std.mem.indexOf(u8, warning, "\x1b[1m`add`\x1b[0m") != null);
     try std.testing.expect(std.mem.indexOf(u8, warning, "\x1b[1;32m`codex-auth-proxy login`\x1b[0m") != null);
 }
 
-test "Scenario: Given codex login access denied when rendering then plain English retry hint is included" {
-    const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
-    defer aw.deinit();
-
-    try cli.writeCodexLoginLaunchFailureHintTo(&aw.writer, "AccessDenied", false);
-
-    const hint = aw.written();
-    try std.testing.expect(std.mem.indexOf(u8, hint, "failed to launch the `codex login` process.") != null);
-    try std.testing.expect(std.mem.indexOf(u8, hint, "Try running `codex login` manually, then retry your command.") != null);
-    try std.testing.expect(std.mem.indexOf(u8, hint, "AccessDenied") == null);
-}
-
-test "Scenario: Given codex login client missing when rendering then detection hint is included" {
-    const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
-    defer aw.deinit();
-
-    try cli.writeCodexLoginLaunchFailureHintTo(&aw.writer, "FileNotFound", false);
-
-    const hint = aw.written();
-    try std.testing.expect(std.mem.indexOf(u8, hint, "the `codex` executable was not found in your PATH.") != null);
-    try std.testing.expect(std.mem.indexOf(u8, hint, "Ensure the Codex CLI is installed and available in your environment.") != null);
-}
 
 test "Scenario: Given switch with positional query when parsing then non-interactive target is preserved" {
     const gpa = std.testing.allocator;
@@ -601,32 +577,32 @@ test "Scenario: Given remove with all and query when parsing then help command i
 
 test "Scenario: Given multiple removed accounts when rendering summary then emails are joined on one line" {
     const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
+    var aw = std.ArrayList(u8).init(gpa);
     defer aw.deinit();
     const emails = [_][]const u8{ "alpha@example.com", "beta@example.com" };
 
-    try cli.writeRemoveSummaryTo(&aw.writer, &emails);
+    try cli.writeRemoveSummaryTo(aw.writer().any(), &emails);
 
     try std.testing.expectEqualStrings(
         "Removed 2 account(s): alpha@example.com, beta@example.com\n",
-        aw.written(),
+        aw.items,
     );
 }
 
 test "Scenario: Given multiple matched accounts when rendering confirmation then the prompt lists each email" {
     const gpa = std.testing.allocator;
-    var aw: std.Io.Writer.Allocating = .init(gpa);
+    var aw = std.ArrayList(u8).init(gpa);
     defer aw.deinit();
     const emails = [_][]const u8{ "alpha@example.com", "beta@example.com" };
 
-    try cli.writeRemoveConfirmationTo(&aw.writer, &emails);
+    try cli.writeRemoveConfirmationTo(aw.writer().any(), &emails);
 
     try std.testing.expectEqualStrings(
         "Matched multiple accounts:\n" ++
             "- alpha@example.com\n" ++
             "- beta@example.com\n" ++
             "Confirm delete? [y/N]: ",
-        aw.written(),
+        aw.items,
     );
 }
 

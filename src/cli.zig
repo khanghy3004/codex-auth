@@ -1,14 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const time_util = @import("time_util.zig");
 const display_rows = @import("display_rows.zig");
 const registry = @import("registry.zig");
 const io_util = @import("io_util.zig");
 const timefmt = @import("timefmt.zig");
 const version = @import("version.zig");
-const c = @cImport({
-    @cInclude("time.h");
-});
-
 const ansi = struct {
     const reset = "\x1b[0m";
     const dim = "\x1b[2m";
@@ -22,17 +19,13 @@ const ansi = struct {
     const bold_cyan = "\x1b[1;36m";
     const bold = "\x1b[1m";
 };
-
 fn colorEnabled() bool {
-    return std.fs.File.stdout().isTty();
+    return std.io.getStdOut().isTty();
 }
-
 fn stderrColorEnabled() bool {
-    return std.fs.File.stderr().isTty();
+    return std.io.getStdErr().isTty();
 }
-
 pub const OutputFormat = enum { table, json, csv, compact };
-
 pub const ListOptions = struct {};
 pub const LoginInvocation = enum { login, add_alias };
 pub const LoginOptions = struct { invocation: LoginInvocation };
@@ -62,10 +55,10 @@ pub const ApiUsageAction = enum { enable, disable };
 pub const ConfigOptions = union(enum) {
     auto_switch: AutoOptions,
     api_usage: ApiUsageAction,
+    provider: ApiUsageAction,
 };
 pub const DaemonMode = enum { watch, once };
 pub const DaemonOptions = struct { mode: DaemonMode };
-
 pub const Command = union(enum) {
     list: ListOptions,
     login: LoginOptions,
@@ -79,27 +72,22 @@ pub const Command = union(enum) {
     version: void,
     help: void,
 };
-
 pub fn parseArgs(allocator: std.mem.Allocator, args: []const [:0]const u8) !Command {
     if (args.len < 2) return Command{ .help = {} };
     const cmd = std.mem.sliceTo(args[1], 0);
-
     if (std.mem.eql(u8, cmd, "--version") or std.mem.eql(u8, cmd, "-V")) {
         if (args.len > 2) return Command{ .help = {} };
         return Command{ .version = {} };
     }
-
     if (std.mem.eql(u8, cmd, "list")) {
         if (args.len > 2) return Command{ .help = {} };
         return Command{ .list = .{} };
     }
-
     if (std.mem.eql(u8, cmd, "login") or std.mem.eql(u8, cmd, "add")) {
         if (args.len > 2) return Command{ .help = {} };
         const invocation: LoginInvocation = if (std.mem.eql(u8, cmd, "add")) .add_alias else .login;
         return Command{ .login = .{ .invocation = invocation } };
     }
-
     if (std.mem.eql(u8, cmd, "import")) {
         var auth_path: ?[]u8 = null;
         var alias: ?[]u8 = null;
@@ -150,7 +138,6 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const [:0]const u8) !Comm
             .source = source,
         } };
     }
-
     if (std.mem.eql(u8, cmd, "switch")) {
         var query: ?[]u8 = null;
         var i: usize = 2;
@@ -168,7 +155,6 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const [:0]const u8) !Comm
         }
         return Command{ .switch_account = .{ .query = query } };
     }
-
     if (std.mem.eql(u8, cmd, "remove")) {
         var query: ?[]u8 = null;
         var all = false;
@@ -195,28 +181,23 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const [:0]const u8) !Comm
         }
         return Command{ .remove_account = .{ .query = query, .all = all } };
     }
-
     if (std.mem.eql(u8, cmd, "clean")) {
         if (args.len > 2) return Command{ .help = {} };
         return Command{ .clean = .{} };
     }
-
     if (std.mem.eql(u8, cmd, "status")) {
         if (args.len > 2) return Command{ .help = {} };
         return Command{ .status = {} };
     }
-
     if (std.mem.eql(u8, cmd, "config")) {
         if (args.len < 3) return Command{ .help = {} };
         const scope = std.mem.sliceTo(args[2], 0);
-
         if (std.mem.eql(u8, scope, "auto")) {
             if (args.len == 4) {
                 const action = std.mem.sliceTo(args[3], 0);
                 if (std.mem.eql(u8, action, "enable")) return Command{ .config = .{ .auto_switch = .{ .action = .enable } } };
                 if (std.mem.eql(u8, action, "disable")) return Command{ .config = .{ .auto_switch = .{ .action = .disable } } };
             }
-
             var threshold_5h_percent: ?u8 = null;
             var threshold_weekly_percent: ?u8 = null;
             var i: usize = 3;
@@ -242,17 +223,20 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const [:0]const u8) !Comm
                 .threshold_weekly_percent = threshold_weekly_percent,
             } } } };
         }
-
         if (std.mem.eql(u8, scope, "api")) {
             if (args.len != 4) return Command{ .help = {} };
             const action = std.mem.sliceTo(args[3], 0);
             if (std.mem.eql(u8, action, "enable")) return Command{ .config = .{ .api_usage = .enable } };
             if (std.mem.eql(u8, action, "disable")) return Command{ .config = .{ .api_usage = .disable } };
         }
-
+        if (std.mem.eql(u8, scope, "provider")) {
+            if (args.len != 4) return Command{ .help = {} };
+            const action = std.mem.sliceTo(args[3], 0);
+            if (std.mem.eql(u8, action, "enable")) return Command{ .config = .{ .provider = .enable } };
+            if (std.mem.eql(u8, action, "disable")) return Command{ .config = .{ .provider = .disable } };
+        }
         return Command{ .help = {} };
     }
-
     if (std.mem.eql(u8, cmd, "daemon")) {
         if (args.len == 3 and std.mem.eql(u8, std.mem.sliceTo(args[2], 0), "--watch")) {
             return Command{ .daemon = .{ .mode = .watch } };
@@ -262,10 +246,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const [:0]const u8) !Comm
         }
         return Command{ .help = {} };
     }
-
     return Command{ .help = {} };
 }
-
 pub fn freeCommand(allocator: std.mem.Allocator, cmd: *Command) void {
     switch (cmd.*) {
         .import_auth => |*opts| {
@@ -281,18 +263,16 @@ pub fn freeCommand(allocator: std.mem.Allocator, cmd: *Command) void {
         else => {},
     }
 }
-
 pub fn printHelp(auto_cfg: *const registry.AutoSwitchConfig, api_cfg: *const registry.ApiConfig) !void {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
     const use_color = colorEnabled();
     try writeHelp(out, use_color, auto_cfg, api_cfg);
-    try out.flush();
+    try stdout.flush();
 }
-
 pub fn writeHelp(
-    out: *std.Io.Writer,
+    out: std.io.AnyWriter,
     use_color: bool,
     auto_cfg: *const registry.AutoSwitchConfig,
     api_cfg: *const registry.ApiConfig,
@@ -305,7 +285,6 @@ pub fn writeHelp(
     try out.writeAll(version.app_version);
     if (use_color) try out.writeAll(ansi.reset);
     try out.writeAll("\n\n");
-
     if (use_color) try out.writeAll(ansi.bold);
     try out.writeAll("Auto Switch:");
     if (use_color) try out.writeAll(ansi.reset);
@@ -313,20 +292,24 @@ pub fn writeHelp(
         " {s} (5h<{d}%, weekly<{d}%)\n\n",
         .{ if (auto_cfg.enabled) "ON" else "OFF", auto_cfg.threshold_5h_percent, auto_cfg.threshold_weekly_percent },
     );
-
     if (use_color) try out.writeAll(ansi.bold);
     try out.writeAll("Usage API:");
     if (use_color) try out.writeAll(ansi.reset);
     try out.print(
-        " {s} ({s})\n\n",
+        " {s} ({s})\n",
         .{ if (api_cfg.usage) "ON" else "OFF", if (api_cfg.usage) "api" else "local" },
     );
-
+    if (use_color) try out.writeAll(ansi.bold);
+    try out.writeAll("Provider:");
+    if (use_color) try out.writeAll(ansi.reset);
+    try out.print(
+        " {s}\n\n",
+        .{ if (auto_cfg.provider) "ON" else "OFF" },
+    );
     if (use_color) try out.writeAll(ansi.bold);
     try out.writeAll("Commands:");
     if (use_color) try out.writeAll(ansi.reset);
     try out.writeAll("\n\n");
-
     const commands = [_]HelpEntry{
         .{ .name = "--version, -V", .description = "Show version" },
         .{ .name = "list", .description = "List available accounts" },
@@ -350,6 +333,8 @@ pub fn writeHelp(
         .{ .name = "auto --5h <percent> [--weekly <percent>]", .description = "Configure auto-switch thresholds" },
         .{ .name = "api enable", .description = "Enable usage API mode" },
         .{ .name = "api disable", .description = "Enable local-only mode" },
+        .{ .name = "provider enable", .description = "Enable local proxy provider in config.toml" },
+        .{ .name = "provider disable", .description = "Disable local proxy provider in config.toml" },
     };
     const parent_indent: usize = 2;
     const child_indent: usize = parent_indent + 4;
@@ -357,26 +342,21 @@ pub fn writeHelp(
     const command_col = helpTargetColumn(&commands, parent_indent);
     const import_detail_col = @max(command_col + child_description_extra, helpTargetColumn(&import_details, child_indent));
     const config_detail_col = @max(command_col + child_description_extra, helpTargetColumn(&config_details, child_indent));
-
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[0].name, commands[0].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[1].name, commands[1].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[2].name, commands[2].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[3].name, commands[3].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[4].name, commands[4].description);
-    try writeHelpEntry(out, use_color, child_indent, import_detail_col, import_details[0].name, import_details[0].description);
-    try writeHelpEntry(out, use_color, child_indent, import_detail_col, import_details[1].name, import_details[1].description);
-    try writeHelpEntry(out, use_color, child_indent, import_detail_col, import_details[2].name, import_details[2].description);
-    try writeHelpEntry(out, use_color, child_indent, import_detail_col, import_details[3].name, import_details[3].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[5].name, commands[5].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[6].name, commands[6].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[7].name, commands[7].description);
-    try writeHelpEntry(out, use_color, parent_indent, command_col, commands[8].name, commands[8].description);
-    try writeHelpEntry(out, use_color, child_indent, config_detail_col, config_details[0].name, config_details[0].description);
-    try writeHelpEntry(out, use_color, child_indent, config_detail_col, config_details[1].name, config_details[1].description);
-    try writeHelpEntry(out, use_color, child_indent, config_detail_col, config_details[2].name, config_details[2].description);
-    try writeHelpEntry(out, use_color, child_indent, config_detail_col, config_details[3].name, config_details[3].description);
-    try writeHelpEntry(out, use_color, child_indent, config_detail_col, config_details[4].name, config_details[4].description);
-
+    for (commands) |command| {
+        if (std.mem.eql(u8, command.name, "import")) {
+            try writeHelpEntry(out, use_color, parent_indent, command_col, command.name, command.description);
+            for (import_details) |detail| {
+                try writeHelpEntry(out, use_color, child_indent, import_detail_col, detail.name, detail.description);
+            }
+        } else if (std.mem.eql(u8, command.name, "config")) {
+            try writeHelpEntry(out, use_color, parent_indent, command_col, command.name, command.description);
+            for (config_details) |detail| {
+                try writeHelpEntry(out, use_color, child_indent, config_detail_col, detail.name, detail.description);
+            }
+        } else {
+            try writeHelpEntry(out, use_color, parent_indent, command_col, command.name, command.description);
+        }
+    }
     try out.writeAll("\n");
     if (use_color) try out.writeAll(ansi.bold);
     try out.writeAll("Notes:");
@@ -385,18 +365,15 @@ pub fn writeHelp(
     try out.writeAll("  `add` is accepted as a deprecated alias for `login` and will be removed in the next release.\n");
     try out.writeAll("  `config api enable` may trigger OpenAI account restrictions or suspension in some environments.\n");
 }
-
 fn parsePercentArg(raw: []const u8) ?u8 {
     const value = std.fmt.parseInt(u8, raw, 10) catch return null;
     if (value < 1 or value > 100) return null;
     return value;
 }
-
 const HelpEntry = struct {
     name: []const u8,
     description: []const u8,
 };
-
 fn helpTargetColumn(entries: []const HelpEntry, indent: usize) usize {
     var max_visible_len: usize = 0;
     for (entries) |entry| {
@@ -404,9 +381,8 @@ fn helpTargetColumn(entries: []const HelpEntry, indent: usize) usize {
     }
     return max_visible_len + 2;
 }
-
 fn writeHelpEntry(
-    out: *std.Io.Writer,
+    out: std.io.AnyWriter,
     use_color: bool,
     indent: usize,
     target_col: usize,
@@ -420,61 +396,51 @@ fn writeHelpEntry(
     }
     try out.print("{s}", .{name});
     if (use_color) try out.writeAll(ansi.reset);
-
     const visible_len = indent + name.len;
     const spaces = if (visible_len >= target_col) 2 else target_col - visible_len;
     i = 0;
     while (i < spaces) : (i += 1) {
         try out.writeAll(" ");
     }
-
     try out.writeAll(description);
     try out.writeAll("\n");
 }
-
 pub fn printVersion() !void {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
     try out.print("codex-auth-proxy {s}\n", .{version.app_version});
-    try out.flush();
+    try stdout.flush();
 }
-
 pub fn printImportReport(report: *const registry.ImportReport) !void {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
-    var stderr_buffer: [4096]u8 = undefined;
-    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
-    try writeImportReport(stdout.out(), &stderr_writer.interface, report);
+    var bw = std.io.bufferedWriter(std.io.getStdErr().writer());
+    try writeImportReport(stdout.out(), bw.writer().any(), report);
+    try bw.flush();
+    try stdout.flush();
 }
-
 pub fn writeImportReport(
-    out: *std.Io.Writer,
-    err_out: *std.Io.Writer,
+    out: std.io.AnyWriter,
+    err_out: std.io.AnyWriter,
     report: *const registry.ImportReport,
 ) !void {
     if (report.render_kind == .scanned) {
         try out.print("Scanning {s}...\n", .{report.source_label.?});
-        try out.flush();
     }
-
     for (report.events.items) |event| {
         switch (event.outcome) {
             .imported => {
                 try out.print("  ✓ imported  {s}\n", .{event.label});
-                try out.flush();
             },
             .updated => {
                 try out.print("  ✓ updated   {s}\n", .{event.label});
-                try out.flush();
             },
             .skipped => {
                 try err_out.print("  ✗ skipped   {s}: {s}\n", .{ event.label, event.reason.? });
-                try err_out.flush();
             },
         }
     }
-
     if (report.render_kind == .scanned) {
         try out.print(
             "Import Summary: {d} imported, {d} updated, {d} skipped (total {d} {s})\n",
@@ -486,99 +452,74 @@ pub fn writeImportReport(
                 if (report.total_files == 1) "file" else "files",
             },
         );
-        try out.flush();
         return;
     }
-
     if (report.skipped > 0 and report.imported == 0 and report.updated == 0) {
         try out.print(
             "Import Summary: {d} imported, {d} skipped\n",
             .{ report.imported, report.skipped },
         );
-        try out.flush();
     }
 }
-
 pub fn warnDeprecatedLoginAlias(opts: LoginOptions) void {
     if (opts.invocation != .add_alias) return;
     writeDeprecatedLoginAliasWarning("codex-auth-proxy login", stderrColorEnabled()) catch {};
 }
-
 fn writeDeprecatedLoginAliasWarning(replacement: []const u8, use_color: bool) !void {
-    var buffer: [512]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buffer);
-    const out = &writer.interface;
-    try writeDeprecatedLoginAliasWarningTo(out, replacement, use_color);
-    try out.flush();
+    var bw = std.io.bufferedWriter(std.io.getStdErr().writer());
+    try writeDeprecatedLoginAliasWarningTo(bw.writer().any(), replacement, use_color);
+    try bw.flush();
 }
-
-pub fn writeErrorPrefixTo(out: *std.Io.Writer, use_color: bool) !void {
+pub fn writeErrorPrefixTo(out: std.io.AnyWriter, use_color: bool) !void {
     if (use_color) try out.writeAll(ansi.bold_red);
     try out.writeAll("error:");
     if (use_color) try out.writeAll(ansi.reset);
 }
-
-pub fn writeHintPrefixTo(out: *std.Io.Writer, use_color: bool) !void {
+pub fn writeHintPrefixTo(out: std.io.AnyWriter, use_color: bool) !void {
     if (use_color) try out.writeAll(ansi.bold_cyan);
     try out.writeAll("hint:");
     if (use_color) try out.writeAll(ansi.reset);
 }
-
 pub fn printAccountNotFoundError(query: []const u8) !void {
-    var buffer: [512]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buffer);
-    const out = &writer.interface;
+    const out = std.io.getStdErr().writer().any();
     const use_color = stderrColorEnabled();
     try writeErrorPrefixTo(out, use_color);
-    try out.print(" no account matches '{s}'.\n", .{query});
-    try out.flush();
+    try out.print(" account not found for query: '{s}'.\n", .{query});
 }
-
 pub fn printRemoveRequiresTtyError() !void {
-    var buffer: [512]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buffer);
-    const out = &writer.interface;
+    const out = std.io.getStdErr().writer().any();
     const use_color = stderrColorEnabled();
     try writeErrorPrefixTo(out, use_color);
     try out.writeAll(" interactive remove requires a TTY.\n");
     try writeHintPrefixTo(out, use_color);
     try out.writeAll(" Use `codex-auth-proxy remove <query>` or `codex-auth-proxy remove --all` instead.\n");
-    try out.flush();
 }
-
 pub fn printInvalidRemoveSelectionError() !void {
-    var buffer: [512]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buffer);
-    const out = &writer.interface;
+    const out = std.io.getStdErr().writer().any();
     const use_color = stderrColorEnabled();
     try writeErrorPrefixTo(out, use_color);
     try out.writeAll(" invalid remove selection input.\n");
     try writeHintPrefixTo(out, use_color);
     try out.writeAll(" Use numbers separated by commas or spaces, for example `1 2` or `1,2`.\n");
-    try out.flush();
 }
-
 pub fn buildRemoveLabels(
     allocator: std.mem.Allocator,
     reg: *registry.Registry,
     indices: []const usize,
-) !std.ArrayList([]const u8) {
-    var labels = std.ArrayList([]const u8).empty;
+) !std.ArrayListUnmanaged([]const u8) {
+    var labels = std.ArrayListUnmanaged([]const u8){};
     errdefer {
         for (labels.items) |label| allocator.free(@constCast(label));
         labels.deinit(allocator);
     }
-
     var display = try display_rows.buildDisplayRows(allocator, reg, indices);
     defer display.deinit(allocator);
-
     var current_header: ?[]const u8 = null;
     for (display.rows) |row| {
         if (row.account_index == null) {
             current_header = row.account_cell;
             continue;
         }
-
         const label = if (row.depth == 0 or current_header == null)
             try allocator.dupe(u8, row.account_cell)
         else
@@ -587,46 +528,37 @@ pub fn buildRemoveLabels(
     }
     return labels;
 }
-
-fn writeMatchedAccountsListTo(out: *std.Io.Writer, labels: []const []const u8) !void {
+fn writeMatchedAccountsListTo(out: std.io.AnyWriter, labels: []const []const u8) !void {
     try out.writeAll("Matched multiple accounts:\n");
     for (labels) |label| {
         try out.print("- {s}\n", .{label});
     }
 }
-
-pub fn writeRemoveConfirmationTo(out: *std.Io.Writer, labels: []const []const u8) !void {
+pub fn writeRemoveConfirmationTo(out: std.io.AnyWriter, labels: []const []const u8) !void {
     try writeMatchedAccountsListTo(out, labels);
     try out.writeAll("Confirm delete? [y/N]: ");
 }
-
 pub fn printRemoveConfirmationUnavailableError(labels: []const []const u8) !void {
-    var buffer: [1024]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buffer);
-    const out = &writer.interface;
+    const out = std.io.getStdErr().writer().any();
     const use_color = stderrColorEnabled();
     try writeMatchedAccountsListTo(out, labels);
     try writeErrorPrefixTo(out, use_color);
     try out.writeAll(" multiple accounts match the query in non-interactive mode.\n");
     try writeHintPrefixTo(out, use_color);
     try out.writeAll(" Refine the query to match one account, or run the command in a TTY.\n");
-    try out.flush();
 }
-
 pub fn confirmRemoveMatches(labels: []const []const u8) !bool {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
     try writeRemoveConfirmationTo(out, labels);
-    try out.flush();
-
+    try stdout.flush();
     var buf: [64]u8 = undefined;
-    const n = try std.fs.File.stdin().read(&buf);
+    const n = try std.io.getStdIn().read(&buf);
     const line = std.mem.trim(u8, buf[0..n], " \n\r\t");
     return line.len == 1 and (line[0] == 'y' or line[0] == 'Y');
 }
-
-pub fn writeRemoveSummaryTo(out: *std.Io.Writer, labels: []const []const u8) !void {
+pub fn writeRemoveSummaryTo(out: std.io.AnyWriter, labels: []const []const u8) !void {
     try out.print("Removed {d} account(s): ", .{labels.len});
     for (labels, 0..) |label, idx| {
         if (idx != 0) try out.writeAll(", ");
@@ -634,16 +566,14 @@ pub fn writeRemoveSummaryTo(out: *std.Io.Writer, labels: []const []const u8) !vo
     }
     try out.writeAll("\n");
 }
-
 pub fn printRemoveSummary(labels: []const []const u8) !void {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
     try writeRemoveSummaryTo(out, labels);
-    try out.flush();
+    try stdout.flush();
 }
-
-pub fn writeDeprecatedLoginAliasWarningTo(out: *std.Io.Writer, replacement: []const u8, use_color: bool) !void {
+pub fn writeDeprecatedLoginAliasWarningTo(out: std.io.AnyWriter, replacement: []const u8, use_color: bool) !void {
     if (use_color) try out.writeAll(ansi.bold_red);
     try out.writeAll("warning:");
     if (use_color) try out.writeAll(ansi.reset);
@@ -657,48 +587,12 @@ pub fn writeDeprecatedLoginAliasWarningTo(out: *std.Io.Writer, replacement: []co
     if (use_color) try out.writeAll(ansi.reset);
     try out.writeAll("\n");
 }
-
-fn writeCodexLoginLaunchFailureHint(err_name: []const u8, use_color: bool) !void {
-    var buffer: [512]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buffer);
-    const out = &writer.interface;
-    try writeCodexLoginLaunchFailureHintTo(out, err_name, use_color);
-    try out.flush();
-}
-
-pub fn writeCodexLoginLaunchFailureHintTo(out: *std.Io.Writer, err_name: []const u8, use_color: bool) !void {
-    try writeErrorPrefixTo(out, use_color);
-    if (std.mem.eql(u8, err_name, "FileNotFound")) {
-        try out.writeAll(" the `codex` executable was not found in your PATH.\n\n");
-        try writeHintPrefixTo(out, use_color);
-        try out.writeAll(" Ensure the Codex CLI is installed and available in your environment.\n");
-        try out.writeAll("      Then run `codex login` manually and retry your command.\n");
-    } else {
-        try out.writeAll(" failed to launch the `codex login` process.\n\n");
-        try writeHintPrefixTo(out, use_color);
-        try out.writeAll(" Try running `codex login` manually, then retry your command.\n");
-    }
-}
-
-pub fn runCodexLogin(allocator: std.mem.Allocator) !void {
-    _ = allocator;
-    var child = std.process.Child.init(&[_][]const u8{ "codex", "login" }, std.heap.page_allocator);
-    child.stdin_behavior = .Inherit;
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
-    _ = child.spawnAndWait() catch |err| {
-        writeCodexLoginLaunchFailureHint(@errorName(err), stderrColorEnabled()) catch {};
-        return err;
-    };
-}
-
 pub fn selectAccount(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]const u8 {
     return if (comptime builtin.os.tag == .windows)
         selectWithNumbers(allocator, reg)
     else
         selectInteractive(allocator, reg) catch selectWithNumbers(allocator, reg);
 }
-
 pub fn selectAccountFromIndices(allocator: std.mem.Allocator, reg: *registry.Registry, indices: []const usize) !?[]const u8 {
     if (indices.len == 0) return null;
     if (indices.len == 1) return reg.accounts.items[indices[0]].account_key;
@@ -707,47 +601,39 @@ pub fn selectAccountFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
     else
         selectInteractiveFromIndices(allocator, reg, indices) catch selectWithNumbersFromIndices(allocator, reg, indices);
 }
-
 pub fn selectAccountsToRemove(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]usize {
     if (comptime builtin.os.tag == .windows) {
         return selectRemoveWithNumbers(allocator, reg);
     }
-    if (shouldUseNumberedRemoveSelector(false, std.fs.File.stdin().isTty())) {
+    if (shouldUseNumberedRemoveSelector(false, std.io.getStdIn().isTty())) {
         return selectRemoveWithNumbers(allocator, reg);
     }
     return selectRemoveInteractive(allocator, reg) catch selectRemoveWithNumbers(allocator, reg);
 }
-
 pub fn shouldUseNumberedRemoveSelector(is_windows: bool, stdin_is_tty: bool) bool {
     return is_windows or !stdin_is_tty;
 }
-
 fn isQuitInput(input: []const u8) bool {
     return input.len == 1 and (input[0] == 'q' or input[0] == 'Q');
 }
-
 fn isQuitKey(key: u8) bool {
     return key == 'q' or key == 'Q';
 }
-
 fn activeSelectableIndex(rows: *const SwitchRows) ?usize {
     for (rows.selectable_row_indices, 0..) |row_idx, pos| {
         if (rows.items[row_idx].is_active) return pos;
     }
     return null;
 }
-
 fn accountIdForSelectable(rows: *const SwitchRows, reg: *registry.Registry, selectable_idx: usize) []const u8 {
     const row_idx = rows.selectable_row_indices[selectable_idx];
     const account_idx = rows.items[row_idx].account_index.?;
     return reg.accounts.items[account_idx].account_key;
 }
-
 fn accountIndexForSelectable(rows: *const SwitchRows, selectable_idx: usize) usize {
     const row_idx = rows.selectable_row_indices[selectable_idx];
     return rows.items[row_idx].account_index.?;
 }
-
 fn selectWithNumbers(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]const u8 {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
@@ -759,14 +645,11 @@ fn selectWithNumbers(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]
     const active_idx = activeSelectableIndex(&rows);
     const idx_width = @max(@as(usize, 2), indexWidth(rows.selectable_row_indices.len));
     const widths = rows.widths;
-
     try out.writeAll("Select account to activate:\n\n");
     try renderSwitchList(out, reg, rows.items, idx_width, widths, active_idx, use_color);
     try out.writeAll("Select account number (or q to quit): ");
-    try out.flush();
-
     var buf: [64]u8 = undefined;
-    const n = try std.fs.File.stdin().read(&buf);
+    const n = try std.io.getStdIn().read(&buf);
     const line = std.mem.trim(u8, buf[0..n], " \n\r\t");
     if (line.len == 0) {
         if (active_idx) |i| return accountIdForSelectable(&rows, reg, i);
@@ -777,27 +660,22 @@ fn selectWithNumbers(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]
     if (idx == 0 or idx > rows.selectable_row_indices.len) return null;
     return accountIdForSelectable(&rows, reg, idx - 1);
 }
-
 fn selectWithNumbersFromIndices(allocator: std.mem.Allocator, reg: *registry.Registry, indices: []const usize) !?[]const u8 {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
     if (indices.len == 0) return null;
-
     var rows = try buildSwitchRowsFromIndices(allocator, reg, indices);
     defer rows.deinit(allocator);
     const use_color = colorEnabled();
     const active_idx = activeSelectableIndex(&rows);
     const idx_width = @max(@as(usize, 2), indexWidth(rows.selectable_row_indices.len));
     const widths = rows.widths;
-
     try out.writeAll("Select account to activate:\n\n");
     try renderSwitchList(out, reg, rows.items, idx_width, widths, active_idx, use_color);
     try out.writeAll("Select account number (or q to quit): ");
-    try out.flush();
-
     var buf: [64]u8 = undefined;
-    const n = try std.fs.File.stdin().read(&buf);
+    const n = try std.io.getStdIn().read(&buf);
     const line = std.mem.trim(u8, buf[0..n], " \n\r\t");
     if (line.len == 0) {
         if (active_idx) |i| return accountIdForSelectable(&rows, reg, i);
@@ -808,15 +686,12 @@ fn selectWithNumbersFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
     if (idx == 0 or idx > rows.selectable_row_indices.len) return null;
     return accountIdForSelectable(&rows, reg, idx - 1);
 }
-
 fn selectInteractiveFromIndices(allocator: std.mem.Allocator, reg: *registry.Registry, indices: []const usize) !?[]const u8 {
     if (indices.len == 0) return null;
     var rows = try buildSwitchRowsFromIndices(allocator, reg, indices);
     defer rows.deinit(allocator);
-
     var tty = try std.fs.cwd().openFile("/dev/tty", .{});
     defer tty.close();
-
     const term = try std.posix.tcgetattr(tty.handle);
     var raw = term;
     raw.lflag.ICANON = false;
@@ -825,7 +700,6 @@ fn selectInteractiveFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
     raw.cc[@intFromEnum(std.c.V.TIME)] = 0;
     try std.posix.tcsetattr(tty.handle, .FLUSH, raw);
     defer std.posix.tcsetattr(tty.handle, .FLUSH, term) catch {};
-
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
@@ -836,7 +710,6 @@ fn selectInteractiveFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
     const use_color = colorEnabled();
     const idx_width = @max(@as(usize, 2), indexWidth(rows.selectable_row_indices.len));
     const widths = rows.widths;
-
     while (true) {
         try out.writeAll("\x1b[2J\x1b[H");
         try out.writeAll("Select account to activate:\n\n");
@@ -845,8 +718,6 @@ fn selectInteractiveFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
         if (use_color) try out.writeAll(ansi.dim);
         try out.writeAll("Keys: ↑/↓ or j/k, Enter select, 1-9 type, Backspace edit, Esc or q quit\n");
         if (use_color) try out.writeAll(ansi.reset);
-        try out.flush();
-
         var b: [8]u8 = undefined;
         const n = try tty.read(&b);
         var i: usize = 0;
@@ -866,7 +737,6 @@ fn selectInteractiveFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
                 }
                 return null;
             }
-
             if (b[i] == '\r' or b[i] == '\n') {
                 if (number_len > 0) {
                     const parsed = std.fmt.parseInt(usize, number_buf[0..number_len], 10) catch 0;
@@ -877,7 +747,6 @@ fn selectInteractiveFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
                 return accountIdForSelectable(&rows, reg, idx);
             }
             if (isQuitKey(b[i])) return null;
-
             if (b[i] == 'k' and idx > 0) {
                 idx -= 1;
                 number_len = 0;
@@ -914,7 +783,6 @@ fn selectInteractiveFromIndices(allocator: std.mem.Allocator, reg: *registry.Reg
         }
     }
 }
-
 fn selectRemoveWithNumbers(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]usize {
     var stdout: io_util.Stdout = undefined;
     stdout.init();
@@ -925,22 +793,17 @@ fn selectRemoveWithNumbers(allocator: std.mem.Allocator, reg: *registry.Registry
     const use_color = colorEnabled();
     const idx_width = @max(@as(usize, 2), indexWidth(rows.selectable_row_indices.len));
     const widths = rows.widths;
-
     var checked = try allocator.alloc(bool, rows.selectable_row_indices.len);
     defer allocator.free(checked);
     @memset(checked, false);
-
     try out.writeAll("Select accounts to delete:\n\n");
     try renderRemoveList(out, reg, rows.items, idx_width, widths, null, checked, use_color);
     try out.writeAll("Enter account numbers (comma/space separated, empty to cancel): ");
-    try out.flush();
-
     var buf: [256]u8 = undefined;
-    const n = try std.fs.File.stdin().read(&buf);
+    const n = try std.io.getStdIn().read(&buf);
     const line = std.mem.trim(u8, buf[0..n], " \n\r\t");
     if (line.len == 0) return null;
     if (!isStrictRemoveSelectionLine(line)) return error.InvalidRemoveSelectionInput;
-
     var current: usize = 0;
     var in_number = false;
     for (line) |ch| {
@@ -960,7 +823,6 @@ fn selectRemoveWithNumbers(allocator: std.mem.Allocator, reg: *registry.Registry
     if (in_number and current >= 1 and current <= rows.selectable_row_indices.len) {
         checked[current - 1] = true;
     }
-
     var count: usize = 0;
     for (checked) |flag| {
         if (flag) count += 1;
@@ -975,7 +837,6 @@ fn selectRemoveWithNumbers(allocator: std.mem.Allocator, reg: *registry.Registry
     }
     return selected;
 }
-
 fn isStrictRemoveSelectionLine(line: []const u8) bool {
     for (line) |ch| {
         if ((ch >= '0' and ch <= '9') or ch == ',' or ch == ' ' or ch == '\t') continue;
@@ -983,15 +844,12 @@ fn isStrictRemoveSelectionLine(line: []const u8) bool {
     }
     return true;
 }
-
 fn selectInteractive(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]const u8 {
     if (reg.accounts.items.len == 0) return null;
     var rows = try buildSwitchRows(allocator, reg);
     defer rows.deinit(allocator);
-
     var tty = try std.fs.cwd().openFile("/dev/tty", .{});
     defer tty.close();
-
     const term = try std.posix.tcgetattr(tty.handle);
     var raw = term;
     raw.lflag.ICANON = false;
@@ -1000,7 +858,6 @@ fn selectInteractive(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]
     raw.cc[@intFromEnum(std.c.V.TIME)] = 0;
     try std.posix.tcsetattr(tty.handle, .FLUSH, raw);
     defer std.posix.tcsetattr(tty.handle, .FLUSH, term) catch {};
-
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
@@ -1011,7 +868,6 @@ fn selectInteractive(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]
     const use_color = colorEnabled();
     const idx_width = @max(@as(usize, 2), indexWidth(rows.selectable_row_indices.len));
     const widths = rows.widths;
-
     while (true) {
         try out.writeAll("\x1b[2J\x1b[H");
         try out.writeAll("Select account to activate:\n\n");
@@ -1020,8 +876,6 @@ fn selectInteractive(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]
         if (use_color) try out.writeAll(ansi.dim);
         try out.writeAll("Keys: ↑/↓ or j/k, Enter select, 1-9 type, Backspace edit, Esc or q quit\n");
         if (use_color) try out.writeAll(ansi.reset);
-        try out.flush();
-
         var b: [8]u8 = undefined;
         const n = try tty.read(&b);
         var i: usize = 0;
@@ -1041,7 +895,6 @@ fn selectInteractive(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]
                 }
                 return null;
             }
-
             if (b[i] == '\r' or b[i] == '\n') {
                 if (number_len > 0) {
                     const parsed = std.fmt.parseInt(usize, number_buf[0..number_len], 10) catch 0;
@@ -1088,15 +941,12 @@ fn selectInteractive(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]
         }
     }
 }
-
 fn selectRemoveInteractive(allocator: std.mem.Allocator, reg: *registry.Registry) !?[]usize {
     if (reg.accounts.items.len == 0) return null;
     var rows = try buildSwitchRows(allocator, reg);
     defer rows.deinit(allocator);
-
     var tty = try std.fs.cwd().openFile("/dev/tty", .{});
     defer tty.close();
-
     const term = try std.posix.tcgetattr(tty.handle);
     var raw = term;
     raw.lflag.ICANON = false;
@@ -1105,11 +955,9 @@ fn selectRemoveInteractive(allocator: std.mem.Allocator, reg: *registry.Registry
     raw.cc[@intFromEnum(std.c.V.TIME)] = 0;
     try std.posix.tcsetattr(tty.handle, .FLUSH, raw);
     defer std.posix.tcsetattr(tty.handle, .FLUSH, term) catch {};
-
     var checked = try allocator.alloc(bool, rows.selectable_row_indices.len);
     defer allocator.free(checked);
     @memset(checked, false);
-
     var stdout: io_util.Stdout = undefined;
     stdout.init();
     const out = stdout.out();
@@ -1119,7 +967,6 @@ fn selectRemoveInteractive(allocator: std.mem.Allocator, reg: *registry.Registry
     const use_color = colorEnabled();
     const idx_width = @max(@as(usize, 2), indexWidth(rows.selectable_row_indices.len));
     const widths = rows.widths;
-
     while (true) {
         try out.writeAll("\x1b[2J\x1b[H");
         try out.writeAll("Select accounts to delete:\n\n");
@@ -1128,8 +975,6 @@ fn selectRemoveInteractive(allocator: std.mem.Allocator, reg: *registry.Registry
         if (use_color) try out.writeAll(ansi.dim);
         try out.writeAll("Keys: ↑/↓ or j/k move, Space toggle, Enter delete, 1-9 type, Backspace edit, Esc exit\n");
         if (use_color) try out.writeAll(ansi.reset);
-        try out.flush();
-
         var b: [8]u8 = undefined;
         const n = try tty.read(&b);
         var i: usize = 0;
@@ -1149,7 +994,6 @@ fn selectRemoveInteractive(allocator: std.mem.Allocator, reg: *registry.Registry
                 }
                 return null;
             }
-
             if (b[i] == '\r' or b[i] == '\n') {
                 var count: usize = 0;
                 for (checked) |flag| {
@@ -1206,9 +1050,8 @@ fn selectRemoveInteractive(allocator: std.mem.Allocator, reg: *registry.Registry
         }
     }
 }
-
 fn renderSwitchList(
-    out: *std.Io.Writer,
+    out: std.io.AnyWriter,
     reg: *registry.Registry,
     rows: []const SwitchRow,
     idx_width: usize,
@@ -1232,7 +1075,6 @@ fn renderSwitchList(
     try out.writeAll("  ");
     try writePadded(out, "LAST", widths.last);
     try out.writeAll("\n");
-
     var selectable_counter: usize = 0;
     for (rows) |row| {
         if (row.is_header) {
@@ -1247,7 +1089,6 @@ fn renderSwitchList(
             if (use_color) try out.writeAll(ansi.reset);
             continue;
         }
-
         const is_selected = selected != null and selected.? == selectable_counter;
         const is_active = row.is_active;
         if (use_color) {
@@ -1279,9 +1120,8 @@ fn renderSwitchList(
         selectable_counter += 1;
     }
 }
-
 fn renderRemoveList(
-    out: *std.Io.Writer,
+    out: std.io.AnyWriter,
     reg: *registry.Registry,
     rows: []const SwitchRow,
     idx_width: usize,
@@ -1307,7 +1147,6 @@ fn renderRemoveList(
     try out.writeAll("  ");
     try writePadded(out, "LAST", widths.last);
     try out.writeAll("\n");
-
     var selectable_counter: usize = 0;
     for (rows) |row| {
         if (row.is_header) {
@@ -1322,7 +1161,6 @@ fn renderRemoveList(
             if (use_color) try out.writeAll(ansi.reset);
             continue;
         }
-
         const is_cursor = cursor != null and cursor.? == selectable_counter;
         const is_checked = checked[selectable_counter];
         const is_active = row.is_active;
@@ -1357,8 +1195,7 @@ fn renderRemoveList(
         selectable_counter += 1;
     }
 }
-
-fn writeIndexPadded(out: *std.Io.Writer, idx: usize, width: usize) !void {
+fn writeIndexPadded(out: std.io.AnyWriter, idx: usize, width: usize) !void {
     var buf: [16]u8 = undefined;
     const idx_str = std.fmt.bufPrint(&buf, "{d}", .{idx}) catch "0";
     if (idx_str.len < width) {
@@ -1369,8 +1206,7 @@ fn writeIndexPadded(out: *std.Io.Writer, idx: usize, width: usize) !void {
     }
     try out.writeAll(idx_str);
 }
-
-fn writePadded(out: *std.Io.Writer, value: []const u8, width: usize) !void {
+fn writePadded(out: std.io.AnyWriter, value: []const u8, width: usize) !void {
     try out.writeAll(value);
     if (value.len >= width) return;
     var i: usize = 0;
@@ -1379,8 +1215,7 @@ fn writePadded(out: *std.Io.Writer, value: []const u8, width: usize) !void {
         try out.writeAll(" ");
     }
 }
-
-fn writeTruncatedPadded(out: *std.Io.Writer, value: []const u8, width: usize) !void {
+fn writeTruncatedPadded(out: std.io.AnyWriter, value: []const u8, width: usize) !void {
     if (width == 0) return;
     if (value.len <= width) {
         try writePadded(out, value, width);
@@ -1393,7 +1228,6 @@ fn writeTruncatedPadded(out: *std.Io.Writer, value: []const u8, width: usize) !v
     try out.writeAll(value[0 .. width - 1]);
     try out.writeAll(".");
 }
-
 const SwitchWidths = struct {
     email: usize,
     plan: usize,
@@ -1401,7 +1235,6 @@ const SwitchWidths = struct {
     rate_week: usize,
     last: usize,
 };
-
 const SwitchRow = struct {
     account_index: ?usize,
     account: []u8,
@@ -1411,7 +1244,6 @@ const SwitchRow = struct {
     last: []u8,
     is_active: bool,
     is_header: bool,
-
     fn deinit(self: *SwitchRow, allocator: std.mem.Allocator) void {
         allocator.free(self.account);
         allocator.free(self.rate_5h);
@@ -1419,19 +1251,16 @@ const SwitchRow = struct {
         allocator.free(self.last);
     }
 };
-
 const SwitchRows = struct {
     items: []SwitchRow,
     selectable_row_indices: []usize,
     widths: SwitchWidths,
-
     fn deinit(self: *SwitchRows, allocator: std.mem.Allocator) void {
         for (self.items) |*row| row.deinit(allocator);
         allocator.free(self.items);
         allocator.free(self.selectable_row_indices);
     }
 };
-
 fn buildSwitchRows(allocator: std.mem.Allocator, reg: *registry.Registry) !SwitchRows {
     var display = try display_rows.buildDisplayRows(allocator, reg, null);
     defer display.deinit(allocator);
@@ -1489,7 +1318,6 @@ fn buildSwitchRows(allocator: std.mem.Allocator, reg: *registry.Registry) !Switc
         .widths = widths,
     };
 }
-
 fn buildSwitchRowsFromIndices(
     allocator: std.mem.Allocator,
     reg: *registry.Registry,
@@ -1551,7 +1379,6 @@ fn buildSwitchRowsFromIndices(
         .widths = widths,
     };
 }
-
 fn resolveRateWindow(usage: ?registry.RateLimitSnapshot, minutes: i64, fallback_primary: bool) ?registry.RateLimitWindow {
     if (usage == null) return null;
     if (usage.?.primary) |p| {
@@ -1562,7 +1389,6 @@ fn resolveRateWindow(usage: ?registry.RateLimitSnapshot, minutes: i64, fallback_
     }
     return if (fallback_primary) usage.?.primary else usage.?.secondary;
 }
-
 fn formatRateLimitSwitchAlloc(allocator: std.mem.Allocator, window: ?registry.RateLimitWindow) ![]u8 {
     if (window == null) return try std.fmt.allocPrint(allocator, "-", .{});
     if (window.?.resets_at == null) return try std.fmt.allocPrint(allocator, "-", .{});
@@ -1579,94 +1405,39 @@ fn formatRateLimitSwitchAlloc(allocator: std.mem.Allocator, window: ?registry.Ra
     }
     return std.fmt.allocPrint(allocator, "{d}% ({s} on {s})", .{ remaining, parts.time, parts.date });
 }
-
 const ResetParts = struct {
     time: []u8,
     date: []u8,
     same_day: bool,
-
     fn deinit(self: *ResetParts, allocator: std.mem.Allocator) void {
         allocator.free(self.time);
         allocator.free(self.date);
     }
 };
-
-fn localtimeCompat(ts: i64, out_tm: *c.struct_tm) bool {
-    if (comptime builtin.os.tag == .windows) {
-        // Bind directly to the exported CRT symbol on Windows.
-        if (comptime @hasDecl(c, "_localtime64_s") and @hasDecl(c, "__time64_t")) {
-            var t64 = std.math.cast(c.__time64_t, ts) orelse return false;
-            return c._localtime64_s(out_tm, &t64) == 0;
-        }
-        return false;
-    }
-
-    var t = std.math.cast(c.time_t, ts) orelse return false;
-    if (comptime @hasDecl(c, "localtime_r")) {
-        return c.localtime_r(&t, out_tm) != null;
-    }
-
-    if (comptime @hasDecl(c, "localtime")) {
-        const tm_ptr = c.localtime(&t);
-        if (tm_ptr == null) return false;
-        out_tm.* = tm_ptr.*;
-        return true;
-    }
-
-    return false;
-}
-
 fn resetPartsAlloc(allocator: std.mem.Allocator, reset_at: i64, now: i64) !ResetParts {
-    var tm: c.struct_tm = undefined;
-    if (!localtimeCompat(reset_at, &tm)) {
-        return ResetParts{
-            .time = try std.fmt.allocPrint(allocator, "-", .{}),
-            .date = try std.fmt.allocPrint(allocator, "-", .{}),
-            .same_day = true,
-        };
-    }
-    var now_tm: c.struct_tm = undefined;
-    if (!localtimeCompat(now, &now_tm)) {
-        return ResetParts{
-            .time = try std.fmt.allocPrint(allocator, "-", .{}),
-            .date = try std.fmt.allocPrint(allocator, "-", .{}),
-            .same_day = true,
-        };
-    }
+    const dt_reset = time_util.fromTimestamp(reset_at);
+    const dt_now = time_util.fromTimestamp(now);
 
-    const same_day = tm.tm_year == now_tm.tm_year and tm.tm_mon == now_tm.tm_mon and tm.tm_mday == now_tm.tm_mday;
-    const hour = @as(u32, @intCast(tm.tm_hour));
-    const min = @as(u32, @intCast(tm.tm_min));
-    const day = @as(u32, @intCast(tm.tm_mday));
+    const same_day = (dt_reset.year == dt_now.year and dt_reset.month == dt_now.month and dt_reset.day == dt_now.day);
+
     const months = [_][]const u8{
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     };
-    const month_idx: usize = if (tm.tm_mon < 0) 0 else @min(@as(usize, @intCast(tm.tm_mon)), months.len - 1);
+    const month_name = months[dt_reset.month - 1];
+
     return ResetParts{
-        .time = try std.fmt.allocPrint(allocator, "{d:0>2}:{d:0>2}", .{ hour, min }),
-        .date = try std.fmt.allocPrint(allocator, "{d} {s}", .{ day, months[month_idx] }),
+        .time = try std.fmt.allocPrint(allocator, "{d:0>2}:{d:0>2}", .{ dt_reset.hour, dt_reset.minute }),
+        .date = try std.fmt.allocPrint(allocator, "{d} {s}", .{ dt_reset.day, month_name }),
         .same_day = same_day,
     };
 }
-
 fn remainingPercent(used: f64) i64 {
     const remaining = 100.0 - used;
     if (remaining <= 0.0) return 0;
     if (remaining >= 100.0) return 100;
     return @as(i64, @intFromFloat(remaining));
 }
-
 fn indexWidth(count: usize) usize {
     var n = count;
     var width: usize = 1;
@@ -1675,7 +1446,6 @@ fn indexWidth(count: usize) usize {
     }
     return width;
 }
-
 test "Scenario: Given q quit input when checking switch picker helpers then both line and key shortcuts cancel selection" {
     try std.testing.expect(isQuitInput("q"));
     try std.testing.expect(isQuitInput("Q"));

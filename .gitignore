@@ -1,12 +1,25 @@
-# Node.js
+# Build Artifacts
 node_modules/
 dist/
+zig-out/
+.zig-cache/
+bin/codex-auth-proxy
+/bin/codex-auth-proxy.exe
+
+# Logs
 *.log
-package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # IDE/Editor
 .idea/
 .vscode/
+.DS_Store
 
 # Local benchmarking workspace
 benchmark/
+
+# Temporary test Files
+registry_backup.json
+*test.json

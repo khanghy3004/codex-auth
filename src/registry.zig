@@ -1,8 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const c_time = @cImport({
-    @cInclude("time.h");
-});
+const time_util = @import("time_util.zig");
 
 pub const PlanType = enum { free, plus, pro, team, business, enterprise, edu, unknown };
 pub const AuthMode = enum { chatgpt, apikey };
@@ -45,6 +43,7 @@ pub const RolloutSignature = struct {
 
 pub const AutoSwitchConfig = struct {
     enabled: bool = false,
+    provider: bool = false,
     threshold_5h_percent: u8 = default_auto_switch_threshold_5h_percent,
     threshold_weekly_percent: u8 = default_auto_switch_threshold_weekly_percent,
 };
@@ -80,7 +79,7 @@ pub const Registry = struct {
     active_account_activated_at_ms: ?i64,
     auto_switch: AutoSwitchConfig,
     api: ApiConfig,
-    accounts: std.ArrayList(AccountRecord),
+    accounts: std.ArrayListUnmanaged(AccountRecord),
 
     pub fn deinit(self: *Registry, allocator: std.mem.Allocator) void {
         for (self.accounts.items) |*rec| {
@@ -372,49 +371,15 @@ fn backupDir(allocator: std.mem.Allocator, codex_home: []const u8) ![]u8 {
     return try std.fs.path.join(allocator, &[_][]const u8{ codex_home, "accounts" });
 }
 
-fn localtimeCompat(ts: i64, out_tm: *c_time.struct_tm) bool {
-    if (comptime builtin.os.tag == .windows) {
-        if (comptime @hasDecl(c_time, "_localtime64_s") and @hasDecl(c_time, "__time64_t")) {
-            var t64 = std.math.cast(c_time.__time64_t, ts) orelse return false;
-            return c_time._localtime64_s(out_tm, &t64) == 0;
-        }
-        return false;
-    }
-
-    var t = std.math.cast(c_time.time_t, ts) orelse return false;
-    if (comptime @hasDecl(c_time, "localtime_r")) {
-        return c_time.localtime_r(&t, out_tm) != null;
-    }
-
-    if (comptime @hasDecl(c_time, "localtime")) {
-        const tm_ptr = c_time.localtime(&t);
-        if (tm_ptr == null) return false;
-        out_tm.* = tm_ptr.*;
-        return true;
-    }
-
-    return false;
-}
-
 fn formatBackupTimestamp(allocator: std.mem.Allocator, ts: i64) ![]u8 {
-    var tm: c_time.struct_tm = undefined;
-    if (!localtimeCompat(ts, &tm)) {
-        return std.fmt.allocPrint(allocator, "{d}", .{ts});
-    }
-
-    const year: u32 = @intCast(tm.tm_year + 1900);
-    const month: u32 = @intCast(tm.tm_mon + 1);
-    const day: u32 = @intCast(tm.tm_mday);
-    const hour: u32 = @intCast(tm.tm_hour);
-    const minute: u32 = @intCast(tm.tm_min);
-    const second: u32 = @intCast(tm.tm_sec);
+    const dt = time_util.fromTimestamp(ts);
     return std.fmt.allocPrint(allocator, "{d:0>4}{d:0>2}{d:0>2}-{d:0>2}{d:0>2}{d:0>2}", .{
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour,
+        dt.minute,
+        dt.second,
     });
 }
 
@@ -454,7 +419,7 @@ fn backupEntryLessThan(_: void, a: BackupEntry, b: BackupEntry) bool {
 }
 
 fn pruneBackups(allocator: std.mem.Allocator, dir: []const u8, base_name: []const u8, max: usize) !void {
-    var list = std.ArrayList(BackupEntry).empty;
+    var list = std.ArrayListUnmanaged(BackupEntry){};
     defer {
         for (list.items) |item| allocator.free(item.name);
         list.deinit(allocator);
@@ -669,12 +634,12 @@ pub const ImportReport = struct {
     updated: usize = 0,
     skipped: usize = 0,
     total_files: usize = 0,
-    events: std.ArrayList(ImportEvent),
+    events: std.ArrayListUnmanaged(ImportEvent),
 
     pub fn init(render_kind: ImportRenderKind) ImportReport {
         return .{
             .render_kind = render_kind,
-            .events = std.ArrayList(ImportEvent).empty,
+            .events = .{},
         };
     }
 
@@ -1140,7 +1105,7 @@ fn importCpaDirectory(
     };
     defer dir.close();
 
-    var names = std.ArrayList([]u8).empty;
+    var names = std.ArrayListUnmanaged([]u8){};
     defer {
         for (names.items) |name| allocator.free(name);
         names.deinit(allocator);
@@ -1180,7 +1145,7 @@ fn importAuthDirectory(
     var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
     defer dir.close();
 
-    var names = std.ArrayList([]u8).empty;
+    var names = std.ArrayListUnmanaged([]u8){};
     defer {
         for (names.items) |name| allocator.free(name);
         names.deinit(allocator);
@@ -1237,7 +1202,7 @@ fn importAccountsSnapshotDirectory(
     };
     defer dir.close();
 
-    var candidates = std.ArrayList(PurgeImportCandidate).empty;
+    var candidates = std.ArrayListUnmanaged(PurgeImportCandidate){};
     defer {
         for (candidates.items) |*candidate| candidate.deinit(allocator);
         candidates.deinit(allocator);
@@ -1873,7 +1838,7 @@ fn defaultRegistry() Registry {
         .active_account_activated_at_ms = null,
         .auto_switch = defaultAutoSwitchConfig(),
         .api = defaultApiConfig(),
-        .accounts = std.ArrayList(AccountRecord).empty,
+        .accounts = .{},
     };
 }
 
@@ -2107,7 +2072,7 @@ fn loadLegacyRegistryV2(
     var reg = defaultRegistry();
     errdefer reg.deinit(allocator);
     var legacy_active_email: ?[]u8 = null;
-    var legacy_accounts = std.ArrayList(LegacyAccountRecord).empty;
+    var legacy_accounts = std.ArrayListUnmanaged(LegacyAccountRecord){};
     defer {
         for (legacy_accounts.items) |*rec| freeLegacyAccountRecord(allocator, rec);
         legacy_accounts.deinit(allocator);
@@ -2337,10 +2302,9 @@ fn writeRegistryFileAtomic(path: []const u8, data: []const u8) !void {
     if (builtin.os.tag == .windows) {
         return writeRegistryFileReplace(path, data);
     }
-    var buf: [4096]u8 = undefined;
-    var atomic_file = try std.fs.cwd().atomicFile(path, .{ .write_buffer = &buf });
+    var atomic_file = try std.fs.cwd().atomicFile(path, .{});
     defer atomic_file.deinit();
-    try atomic_file.file_writer.interface.writeAll(data);
+    try atomic_file.file.writer().any().writeAll(data);
     try atomic_file.finish();
 }
 
@@ -2358,11 +2322,11 @@ pub fn saveRegistry(allocator: std.mem.Allocator, codex_home: []const u8, reg: *
         .api = reg.api,
         .accounts = reg.accounts.items,
     };
-    var aw: std.Io.Writer.Allocating = .init(allocator);
+    var aw = std.ArrayList(u8).init(allocator);
     defer aw.deinit();
-    const writer = &aw.writer;
-    try std.json.Stringify.value(out, .{ .whitespace = .indent_2 }, writer);
-    const data = aw.written();
+    const writer = aw.writer();
+    try std.json.stringify(out, .{ .whitespace = .indent_2 }, writer);
+    const data = aw.items;
 
     if (try fileEqualsBytes(allocator, path, data)) {
         return;
@@ -2604,4 +2568,114 @@ pub fn autoImportActiveAuth(allocator: std.mem.Allocator, codex_home: []const u8
     try upsertAccount(allocator, reg, record);
     try setActiveAccountKey(allocator, reg, record_key);
     return true;
+}
+
+pub fn updateCodexConfigToml(allocator: std.mem.Allocator, codex_home: []const u8, enable: bool) !void {
+    const config_path = try std.fs.path.join(allocator, &[_][]const u8{ codex_home, "config.toml" });
+    defer allocator.free(config_path);
+
+    const file_data = readFileIfExists(allocator, config_path) catch |err| {
+        if (err == error.FileNotFound) return;
+        return err;
+    } orelse return;
+    defer allocator.free(file_data);
+
+    var lines = std.ArrayList([]const u8).init(allocator);
+    defer lines.deinit();
+
+    var it = std.mem.splitScalar(u8, file_data, '\n');
+    var in_section = false;
+    while (it.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \r\t");
+        if (std.mem.startsWith(u8, trimmed, "[model_providers.codex-auth-proxy]")) {
+            in_section = true;
+            continue;
+        }
+        if (in_section) {
+            if (std.mem.startsWith(u8, trimmed, "[")) {
+                in_section = false;
+                // Don't continue, process this new section header
+            } else {
+                continue;
+            }
+        }
+        if (std.mem.startsWith(u8, trimmed, "model_provider = ")) {
+            continue;
+        }
+        try lines.append(line);
+    }
+
+    // Clean up empty lines at the end before adding new ones
+    while (lines.items.len > 0 and std.mem.trim(u8, lines.items[lines.items.len - 1], " \r\t").len == 0) {
+        _ = lines.pop();
+    }
+
+    var out_buf = std.ArrayList(u8).init(allocator);
+    defer out_buf.deinit();
+
+    if (enable) {
+        try out_buf.appendSlice("model_provider = \"codex-auth-proxy\"\n");
+    }
+
+    for (lines.items) |line| {
+        try out_buf.appendSlice(line);
+        try out_buf.append('\n');
+    }
+
+    if (enable) {
+        try out_buf.appendSlice("\n");
+        try out_buf.appendSlice("[model_providers.codex-auth-proxy]\n");
+        try out_buf.appendSlice("name = \"codex-auth-proxy\"\n");
+        try out_buf.appendSlice("base_url = \"http://localhost:8080/v1\"\n");
+        try out_buf.appendSlice("token = \"sk-local-proxy\"\n");
+    }
+
+    try writeFile(config_path, out_buf.items);
+}
+
+pub const ProviderRecord = struct {
+    name: []const u8,
+    baseUrl: []const u8,
+    apiKey: []const u8,
+};
+
+pub const ProvidersConfig = struct {
+    providers: std.ArrayListUnmanaged(ProviderRecord),
+
+    pub fn deinit(self: *ProvidersConfig, allocator: std.mem.Allocator) void {
+        for (self.providers.items) |p| {
+            allocator.free(p.name);
+            allocator.free(p.baseUrl);
+            allocator.free(p.apiKey);
+        }
+        self.providers.deinit(allocator);
+    }
+};
+
+pub fn loadProviders(allocator: std.mem.Allocator, codex_home: []const u8) !ProvidersConfig {
+    const path = try std.fs.path.join(allocator, &[_][]const u8{ codex_home, "providers.json" });
+    defer allocator.free(path);
+
+    const data = readFileIfExists(allocator, path) catch |err| {
+        if (err == error.FileNotFound) return ProvidersConfig{ .providers = .{} };
+        return err;
+    } orelse return ProvidersConfig{ .providers = .{} };
+    defer allocator.free(data);
+
+    const ParsedProviders = struct {
+        providers: []ProviderRecord,
+    };
+
+    const parsed = try std.json.parseFromSlice(ParsedProviders, allocator, data, .{ .ignore_unknown_fields = true });
+    defer parsed.deinit();
+
+    var providers = std.ArrayListUnmanaged(ProviderRecord){};
+    for (parsed.value.providers) |p| {
+        try providers.append(allocator, .{
+            .name = try allocator.dupe(u8, p.name),
+            .baseUrl = try allocator.dupe(u8, p.baseUrl),
+            .apiKey = try allocator.dupe(u8, p.apiKey),
+        });
+    }
+    return ProvidersConfig{ .providers = providers };
 }

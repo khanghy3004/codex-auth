@@ -165,7 +165,7 @@ pub fn scanLatestRolloutEventWithSource(allocator: std.mem.Allocator, codex_home
     const sessions_root = try std.fs.path.join(allocator, &[_][]const u8{ codex_home, "sessions" });
     defer allocator.free(sessions_root);
 
-    var candidates = std.ArrayList(RolloutCandidate).empty;
+    var candidates = std.ArrayListUnmanaged(RolloutCandidate){};
     defer {
         for (candidates.items) |candidate| {
             allocator.free(candidate.path);
@@ -276,44 +276,26 @@ fn scanFileForUsageWithMode(allocator: std.mem.Allocator, path: []const u8, keep
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    var read_buffer: [8192]u8 = undefined;
-    var file_reader = file.reader(&read_buffer);
-    const reader = &file_reader.interface;
-    var line_buffer: std.Io.Writer.Allocating = .init(allocator);
-    defer line_buffer.deinit();
+    var br = std.io.bufferedReader(file.reader());
+    const reader = br.reader().any();
+    var line_buffer = std.ArrayListUnmanaged(u8){};
+    defer line_buffer.deinit(allocator);
     var last: ?ParsedUsageEvent = null;
 
     while (true) {
         line_buffer.clearRetainingCapacity();
-        const line_len = reader.streamDelimiterLimit(
-            &line_buffer.writer,
-            '\n',
-            .limited(max_rollout_line_bytes),
-        ) catch |err| switch (err) {
+        reader.streamUntilDelimiter(line_buffer.writer(allocator), '\n', max_rollout_line_bytes) catch |err| switch (err) {
             error.StreamTooLong => {
-                _ = reader.discardDelimiterInclusive('\n') catch |discard_err| switch (discard_err) {
-                    error.EndOfStream => break,
-                    error.ReadFailed => return file_reader.err orelse error.ReadFailed,
-                };
+                try reader.skipUntilDelimiterOrEof('\n');
                 continue;
             },
-            error.ReadFailed => return file_reader.err orelse error.ReadFailed,
-            error.WriteFailed => return error.OutOfMemory,
+            error.EndOfStream => {
+                if (line_buffer.items.len == 0) break;
+            },
+            else => return err,
         };
-        const line = line_buffer.written();
-        const next_byte: ?u8 = reader.peekByte() catch |err| switch (err) {
-            error.EndOfStream => null,
-            error.ReadFailed => return file_reader.err orelse error.ReadFailed,
-        };
-        if (next_byte) |byte| {
-            std.debug.assert(byte == '\n');
-            _ = reader.discardDelimiterInclusive('\n') catch |err| switch (err) {
-                error.EndOfStream => unreachable,
-                error.ReadFailed => return file_reader.err orelse error.ReadFailed,
-            };
-        } else if (line_len == 0) {
-            break;
-        }
+
+        const line = line_buffer.items;
         const trimmed = std.mem.trim(u8, line, " \r\t");
         if (trimmed.len == 0) continue;
         if (parseUsageEventLine(allocator, trimmed)) |event| {

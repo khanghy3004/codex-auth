@@ -8,9 +8,12 @@ export interface AccountInfo {
   alias: string;
   type: 'chatgpt' | 'custom';
   access_token?: string;
+  id_token?: string;
+  refresh_token?: string;
   chatgpt_account_id?: string;
   baseUrl?: string; // For custom providers
   exhausted_until?: number; // timestamp in ms
+  cookies?: string; // Standard Cookie header string
 }
 
 export class AccountManager {
@@ -24,9 +27,10 @@ export class AccountManager {
   }
 
   public loadAccounts() {
+    // Disabled: Only using custom providers
+    /*
     const registryPath = path.join(this.codexHome, 'accounts', 'registry.json');
     if (!fs.existsSync(registryPath)) {
-      console.warn(`[Proxy] Registry not found at: ${registryPath}`);
       return;
     }
 
@@ -47,8 +51,9 @@ export class AccountManager {
       }
       this.accounts.push(...chatgptAccounts);
     } catch (error) {
-      console.error('Failed to load registry:', error);
+      // ignore
     }
+    */
   }
 
   public loadCustomProviders() {
@@ -67,9 +72,11 @@ export class AccountManager {
         exhausted_until: 0
       }));
       this.accounts.push(...customOnes);
-      console.log(`Loaded ${customOnes.length} custom providers.`);
+      if (customOnes.length > 0) {
+        console.log(`[AccountManager] Registered ${customOnes.length} custom providers.`);
+      }
     } catch (error) {
-      console.error('Failed to load custom providers:', error);
+      // ignore
     }
   }
 
@@ -87,26 +94,37 @@ export class AccountManager {
     );
 
     if (filename) {
-      const finalPath = path.join(accountsDir, filename);
+      const authPath = path.join(accountsDir, filename);
       try {
-        const authData = JSON.parse(fs.readFileSync(finalPath, 'utf8'));
+        const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+        
+        // Try to load extra cookies from a .cookies file if it exists
+        let cookies = '';
+        const cookiePath = authPath.replace('.auth.json', '.cookies');
+        if (fs.existsSync(cookiePath)) {
+          cookies = fs.readFileSync(cookiePath, 'utf-8').trim();
+        }
+
         if (authData.tokens) {
           account.access_token = authData.tokens.access_token;
-          account.chatgpt_account_id = authData.tokens.account_id || authData.chatgpt_account_id;
+          account.id_token = authData.tokens.id_token;
+          account.refresh_token = authData.tokens.refresh_token;
+          account.chatgpt_account_id = authData.tokens.account_id || authData.tokens.user_id;
+          account.cookies = cookies;
         } else {
           account.access_token = authData.access_token;
           account.chatgpt_account_id = authData.chatgpt_account_id;
+          account.cookies = cookies;
         }
       } catch (error) {
         console.error(`Failed to load auth for ${account.email}:`, error);
       }
     } else {
-      // console.warn(`[Proxy] No auth file found for ${account.email}`);
+      console.warn(`[AccountManager] No auth file found for ${account.email}`);
     }
   }
 
-  private currentChatGPTIndex: number = -1;
-  private currentCustomIndex: number = -1;
+  private currentAccountIndex: number = -1;
 
   public getNextAvailableAccount(): AccountInfo | null {
     const now = Date.now();
@@ -114,28 +132,14 @@ export class AccountManager {
 
     if (available.length === 0) return null;
 
-    // 1. Prioritize ChatGPT accounts
-    const availableChatGPT = available.filter(a => a.type === 'chatgpt');
-    if (availableChatGPT.length > 0) {
-      this.currentChatGPTIndex = (this.currentChatGPTIndex + 1) % availableChatGPT.length;
-      return availableChatGPT[this.currentChatGPTIndex];
-    }
-
-    // 2. Fallback to custom providers
-    const availableCustom = available.filter(a => a.type === 'custom');
-    if (availableCustom.length > 0) {
-      this.currentCustomIndex = (this.currentCustomIndex + 1) % availableCustom.length;
-      return availableCustom[this.currentCustomIndex];
-    }
-
-    return null;
+    this.currentAccountIndex = (this.currentAccountIndex + 1) % available.length;
+    return available[this.currentAccountIndex];
   }
 
   public markExhausted(accountKey: string, durationMinutes: number = 20) {
     const account = this.accounts.find(a => a.account_key === accountKey);
     if (account) {
       account.exhausted_until = Date.now() + durationMinutes * 60 * 1000;
-      console.log(`Account ${account.email} marked as exhausted until ${new Date(account.exhausted_until).toLocaleTimeString()}`);
     }
   }
 

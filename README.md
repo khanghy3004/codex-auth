@@ -2,405 +2,124 @@
 
 ![command list](https://github.com/user-attachments/assets/6c13a2d6-f9da-47ea-8ec8-0394fc072d40)
 
-`codex-auth-proxy` is a command-line tool for switching Codex accounts.
+`codex-auth-proxy` is a high-performance, native command-line tool for managing and rotating Codex/ChatGPT accounts with built-in load balancing.
 
 > [!IMPORTANT]
-> For **Codex CLI** users, after switching accounts, you must fully exit `codex` (type `/exit` or close the terminal session) and start it again for the new account to take effect.
->
-> If you want seamless automatic account switching without restarting `codex`, use forked [codext](https://github.com/Loongphy/codext), but you need to build it yourself because there is no prebuilt install method yet.
+> **New in v0.3.0**: This tool has been rewritten in Zig for maximum performance and is now completely independent of the legacy `codex` CLI. It features a transparent proxy with automatic provider rotation.
 
-## Supported Platforms
+## Key Features
 
-`codex-auth-proxy` works with these Codex clients:
-
-- Codex CLI
-- VS Code extension
-- Codex App
-
-For the best experience, install the Codex CLI even if you mainly use the VS Code extension or the App, because it makes adding accounts easier:
-
-```shell
-npm install -g @openai/codex
-```
-
-After that, you can use `codex login` or `codex-auth-proxy login` to sign in and add accounts more easily.
+- **🚀 Native Performance**: Rewritten in Zig 0.13.0, providing a tiny, fast, and dependency-free binary.
+- **🔄 Smart Rotation**: Automatically rotates through multiple ChatGPT accounts and custom providers (like OpenRouter/DeepSeek) when rate limits are reached.
+- **⚖️ Load Balancing**: Built-in round-robin load balancing across all active providers.
+- **🛠️ Self-Configuring**: One-click integration with your `~/.codex/config.toml` via `config provider enable`.
+- **📦 Cross-Platform**: First-class support for Linux, macOS (Intel/M1/M2), and Windows (x64).
+- **🔒 Secure & Private**: Directly interacts with OpenAI APIs; no third-party servers involved.
 
 ## Install
 
-Install with npm:
+### via npm (Recommended)
 
 ```shell
 npm install -g codex-auth-proxy
 ```
 
-  You can also run it without a global install:
+### Manual Build (from Source)
+
+Requires [Zig 0.13.0](https://ziglang.org/download/):
 
 ```shell
-npx codex-auth-proxy list
+zig build -Doptimize=ReleaseSafe
+cp zig-out/bin/codex-auth-proxy /usr/local/bin/
 ```
 
-  npm packages currently support Linux x64, macOS x64, macOS arm64, and Windows x64.
+## Quick Start
 
-> [!NOTE]
-> If you only installed `codex-auth-proxy` with npm, you do not need any legacy cleanup steps.
-> Older Bash/PowerShell GitHub-release installs could leave a standalone `codex-auth-proxy` binary outside npm's install path.
-> If you previously used those legacy installers, remove the leftover binaries and profile changes during migration.
-
-### Uninstall
-
-#### npm
-
-Remove the npm package:
-
-```shell
-npm uninstall -g codex-auth-proxy
-```
-
-#### Legacy Bash Installer
-
-For non-npm installs on Linux/macOS/WSL2 only:
-
-```shell
-rm -f ~/.local/bin/codex-auth-proxy
-rm -f ~/.local/bin/codex-auth-proxy-auto
-sed -i '/# Added by codex-auth-proxy installer/,+1d' ~/.bashrc ~/.bash_profile ~/.profile ~/.zshrc ~/.zprofile 2>/dev/null || true
-```
-
-If you used fish, also remove the old profile entry:
-
-```shell
-sed -i '/# Added by codex-auth-proxy installer/,+3d' ~/.config/fish/config.fish 2>/dev/null || true
-```
-
-#### Legacy PowerShell Installer
-
-For non-npm installs on Windows only:
-
-```powershell
-Remove-Item "$env:LOCALAPPDATA\codex-auth-proxy\bin\codex-auth-proxy.exe" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:LOCALAPPDATA\codex-auth-proxy\bin\codex-auth-proxy-auto.exe" -Force -ErrorAction SilentlyContinue
-[Environment]::SetEnvironmentVariable(
-  "Path",
-  (($env:Path -split ';' | Where-Object { $_ -and $_ -ne "$env:LOCALAPPDATA\codex-auth-proxy\bin" }) -join ';'),
-  "User"
-)
-```
+1. **Login**: Add your accounts directly.
+   ```shell
+   codex-auth-proxy login
+   ```
+2. **Add Custom Providers**: Create `~/.codex/providers.json`.
+   ```json
+   {
+     "providers": [
+       {
+         "name": "my-provider",
+         "baseUrl": "https://api.example.com/v1",
+         "apiKey": "sk-..."
+       }
+     ]
+   }
+   ```
+3. **Enable Proxy Integration**:
+   ```shell
+   codex-auth-proxy config provider enable
+   ```
+4. **Start the Proxy**:
+   ```shell
+   codex-auth-proxy start
+   ```
 
 ## Commands
 
-### Account Management
+### Account & Provider Management
 
 | Command | Description |
 |---------|-------------|
-| `codex-auth-proxy list` | List all accounts |
-| `codex-auth-proxy login` | Run `codex login`, then add the current account |
-| `codex-auth-proxy switch [<email>]` | Switch active account interactively or by partial match |
-| `codex-auth-proxy remove` | Remove accounts with interactive multi-select |
-| `codex-auth-proxy status` | Show auto-switch, service, and usage status |
-| `codex-auth-proxy start [<port>]` | Start the local proxy server (default: 8080) |
+| `list` | Show all accounts and custom providers with real-time status |
+| `status` | Display current auto-switch, usage API, and provider status |
+| `login` | Interactive sign-in to add a new ChatGPT account |
+| `switch` | Manually toggle the active primary account |
+| `remove` | Interactively delete accounts from the registry |
+| `clean` | Cleanup stale session and backup files |
 
-> `codex-auth-proxy add` is still accepted as a deprecated alias for `codex-auth-proxy login`.
-
-### Import
+### Local Proxy Engine
 
 | Command | Description |
 |---------|-------------|
-| `codex-auth-proxy import <path> [--alias <alias>]` | Import a single file or batch import from a folder |
-| `codex-auth-proxy import --cpa [<path>]` | Import [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) token JSON |
-| `codex-auth-proxy import --purge [<path>]` | Rebuild `registry.json` from existing auth files |
+| `start [<port>]` | Launch the rotation proxy (default: 8080) |
+| `stop [<port>]` | Stop the proxy running on a specific port |
+| `config provider enable` | Automatically register proxy in `config.toml` |
+| `config provider disable` | Remove proxy registration from `config.toml` |
 
-### Configuration
+### Advanced Configuration
 
 | Command | Description |
 |---------|-------------|
-| `codex-auth-proxy config auto enable\|disable` | Enable or disable background auto-switching |
-| `codex-auth-proxy config auto [--5h <%>] [--weekly <%>]` | Set auto-switch thresholds |
-| `codex-auth-proxy config api enable\|disable` | Use API-backed fallback or local-only usage refresh |
-| `codex-auth-proxy config proxy-port <port>` | Set the local proxy port (default 8080) |
+| `config auto enable\|disable` | Toggle background usage monitoring |
+| `config auto --5h <%>` | Set thresholds for automatic account switching |
+| `config api enable\|disable` | Toggle direct OpenAI usage API polling |
+
+## How the Proxy Works
+
+`codex-auth-proxy` acts as a transparent middleware between your IDE (Cursor, VS Code) and AI providers:
+
+1. **Request Interception**: Receives standard OpenAI/Codex API calls.
+2. **Dynamic Selection**: Picks the best available account or provider using round-robin logic.
+3. **Automatic Fallback**: If a provider returns a `429` (Rate Limit) or `403` (Forbidden), it immediately retries with the next one.
+4. **Streaming Support**: Full support for Server-Sent Events (SSE) ensures a smooth typing experience.
+5. **Token Tracking**: Transparently logs token usage for every request.
+
+## Development
+
+The project is split into two parts:
+- **Core (Zig)**: Handles CLI, registry management, account crypto, and OS integration.
+- **Proxy (Node.js/TS)**: Handles high-concurrency HTTP traffic and streaming logic.
+
+### Building
+```bash
+# Build native core
+zig build
+
+# Build proxy
+npm install
+npm run build
+```
+
+## License
+
+MIT - Use at your own risk.
 
 ---
 
-## Examples
-
-### List Accounts
-
-```shell
-codex-auth-proxy list
-```
-
-### Switch Account
-
-Interactive: shows email, 5h, weekly, and last activity.
-
-```shell
-codex-auth-proxy switch
-```
-
-Before the picker opens, the current active account's usage is refreshed once so the selected row is not stale. The newly selected account is not refreshed after the switch completes.
-
-![command switch](https://github.com/user-attachments/assets/48a86acf-2a6e-4206-a8c4-591989fdc0df)
-
-Non-interactive: fuzzy match by email or alias.
-
-```shell
-codex-auth-proxy switch john             # match any account containing "john"
-codex-auth-proxy switch john@gmail.com   # match by full or partial email
-codex-auth-proxy switch work             # match by alias set during import
-```
-
-If the keyword matches multiple accounts, the command falls back to interactive selection. Press `q` to quit without switching.
-
-### Remove Accounts
-
-```shell
-codex-auth-proxy remove
-```
-
-### Login (Add Account)
-
-Add the currently logged-in Codex account:
-
-```shell
-codex-auth-proxy login
-```
-
-### Import
-
-#### Single File
-
-```shell
-codex-auth-proxy import /path/to/auth.json --alias personal
-```
-
-#### Batch Import from a Folder
-
-Scans all `.json` files in the directory:
-
-```shell
-codex-auth-proxy import /path/to/auth-exports
-```
-
-Typical output:
-
-```text
-Scanning /path/to/auth-exports...
-  ✓ imported  token_ryan.taylor.alpha@email.com
-  ✓ updated   token_jane.smith.alpha@email.com
-  ✗ skipped   token_invalid: MalformedJson
-Import Summary: 1 imported, 1 updated, 1 skipped (total 3 files)
-```
-
-`stdout` carries scanning, success, and summary lines. Skipped files and warnings stay on `stderr`.
-
-#### Import CLIProxyAPI (CPA) Tokens
-
-[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) stores tokens as flat JSON under `~/.cli-proxy-api/`. Import them directly without conversion:
-
-```shell
-codex-auth-proxy import --cpa                                  # scan default ~/.cli-proxy-api/*.json
-codex-auth-proxy import --cpa /path/to/cpa-dir                 # scan a specific directory
-codex-auth-proxy import --cpa /path/to/token.json --alias bob  # import a single CPA file
-```
-
-#### Fix Broken Account Data (Rebuild Registry)
-
-If `codex-auth-proxy list` shows missing accounts or wrong usage data, the internal registry file may be out of sync with the actual auth files on disk. This command re-reads all auth files and rebuilds the registry from scratch:
-
-```shell
-codex-auth-proxy import --purge                                # rebuild from ~/.codex/accounts/*.auth.json
-codex-auth-proxy import --purge /path/to/auth-exports          # rebuild from a specific folder
-```
-
-This does not import new files. It repairs the registry index for auth snapshots that already exist on disk.
-
-### Show Status
-
-```shell
-codex-auth-proxy status
-```
-
-### Config
-
-#### Auto-Switch
-
-Enable or disable:
-
-```shell
-codex-auth-proxy config auto enable
-codex-auth-proxy config auto disable
-```
-
-`config auto enable` prints the current usage mode after installing the watcher, so you can immediately see whether auto-switch is running with default API-backed usage or local-only fallback semantics.
-
-Adjust thresholds:
-
-```shell
-codex-auth-proxy config auto --5h 12
-codex-auth-proxy config auto --5h 12 --weekly 8
-codex-auth-proxy config auto --weekly 8
-```
-
-When auto-switching is enabled, a long-running background watcher refreshes the active account's usage and silently switches accounts when:
-
-- 5h remaining drops below the configured 5h threshold (default `10%`), or
-- weekly remaining drops below the configured weekly threshold (default `5%`)
-
-The managed background worker is long-running on all supported platforms:
-
-- Linux/WSL: persistent `systemd --user` service
-- macOS: `LaunchAgent`
-- Windows: scheduled task that launches the long-running helper at logon, restarts it after failures, has no 72-hour execution cap, and also starts it immediately on enable
-
-#### Usage Refresh Source
-
-API-backed fallback:
-
-```shell
-codex-auth-proxy config api enable
-```
-
-Local-only, no usage API calls:
-
-```shell
-codex-auth-proxy config api disable
-```
-
-Changing `config api` updates `registry.json` immediately. `api enable` is shown as API mode and `api disable` is shown as local mode.
-
-Implementation details are documented in [`docs/auto-switch.md`](docs/auto-switch.md).
-
-## Local Proxy Service
-
-The local proxy allows seamless, uninterrupted AI usage by automatically rotating through your accounts or custom providers when quota limits are reached.
-
-### How it works
-
-1.  **Prioritization**: The proxy always uses your native ChatGPT accounts first.
-2.  **Fallback**: When all accounts are exhausted (429 Rate Limit), it automatically switches to your custom providers (like OpenRouter).
-3.  **Transparency**: Supports streaming (SSE) and preserves all request paths and headers.
-
-### Step 1: Configure Providers
-
-Create `~/.codex/providers.json` with your custom OpenAI-compatible providers:
-
-```json
-{
-  "providers": [
-    {
-      "name": "my-openrouter",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "apiKey": "sk-or-..."
-    }
-  ]
-}
-```
-
-### Step 2: Start the Proxy
-
-#1.  **Start the proxy**:
-    ```bash
-    codex-auth-proxy start
-    ```
-    *Optional: Start on a custom port:*
-    ```bash
-    codex-auth-proxy start 9000
-    ```
-
-### Step 3: Point Codex to Local Proxy
-
-Update your `~/.codex/config.toml` to use the local proxy:
-
-```toml
-[model_providers.myproxy]
-name = "myproxy"
-base_url = "http://localhost:8080/v1"
-
-# Set as default or use per model
-model_provider = "myproxy"
-```
-
-### Logging
-
-The proxy provides detailed logs for every request:
-- Account/Provider type and email
-- Model name
-- Token usage (prompts, completion, total)
-- Real-time streaming status
-
-## Q&A
-
-### Why is my usage limit not refreshing?
-
-If `codex-auth-proxy` is using local-only usage refresh, it reads the newest `~/.codex/sessions/**/rollout-*.jsonl` file. Recent Codex builds often write `token_count` events with `rate_limits: null`. The local files may still contain older usable usage limit data, but in practice they can lag by several hours, so local-only refresh may show a usage limit snapshot from hours ago instead of your latest state.
-
-- Upstream Codex issue: [openai/codex#14880](https://github.com/openai/codex/issues/14880)
-
-You can switch usage limit refresh to the usage API with:
-
-```shell
-codex-auth-proxy config api enable
-```
-
-Then confirm the current mode with:
-
-```shell
-codex-auth-proxy status
-```
-
-`status` should show `usage: api`.
-
-Upgrade notes:
-
-- If you are upgrading from `v0.1.x` to the latest `v0.2.x`, API usage refresh is enabled by default.
-- If you previously used an early `v0.2` prerelease/test build and `status` still shows `usage: local`, run `codex-auth-proxy config api enable` once to switch back to API mode.
-
-### How to import tokens from cli-proxy-api?
-
-If you have token files from `~/.cli-proxy-api/token*.json`, this repository includes a helper script that can convert them into a format codex-auth-proxy can read.
-
-The CLI can also import the flat cli-proxy-api / CPA JSON files directly:
-
-```shell
-codex-auth-proxy import --cpa                  # default source: ~/.cli-proxy-api
-codex-auth-proxy import --cpa /path/to/cpa-dir # scans direct child .json files
-```
-
-Each CPA file is converted in memory to the standard auth snapshot shape before it is written into `~/.codex/accounts/`. Missing or empty `refresh_token` values are skipped as `MissingRefreshToken`.
-
-The script is not bundled in the published npm package, so run it from a clone of this repository:
-
-```shell
-# Convert: ~/.cli-proxy-api → /tmp/tokens
-python3 scripts/convert_tokens.sh
-
-# Or specify custom directories
-python3 scripts/convert_tokens.sh <source_dir> <output_dir>
-```
-
-Then import and switch:
-
-```shell
-codex-auth-proxy import /tmp/tokens/
-# or import the CPA files directly without a conversion step
-codex-auth-proxy import --cpa
-codex-auth-proxy switch
-```
-
-Verify with:
-
-```shell
-codex exec "say hello"
-```
-
-## Disclaimer
-
-This project is provided as-is and use is at your own risk.
-
-**Usage Data Refresh Source:**
-`codex-auth-proxy` supports two sources for refreshing account usage/usage limit information:
-
-1. **API (default):** When `config api enable` is on, the tool makes direct HTTPS requests to OpenAI's endpoints using your account's access token. This is the current default mode.
-2. **Local-only:** When `config api disable` is on, the tool scans local `~/.codex/sessions/*/rollout-*.jsonl` files without making API calls. This mode is safer, but it can be less accurate because recent Codex rollout files often contain `rate_limits: null`, so the latest local usage limit data may lag by several hours.
-
-**API Call Declaration:**
-By enabling API-based usage refresh, this tool will send your ChatGPT access token to OpenAI's servers (specifically `https://chatgpt.com/backend-api/wham/usage`) to fetch current quota information. This behavior may be detected by OpenAI and could violate their terms of service, potentially leading to account suspension or other risks. The decision to use this feature and any resulting consequences are entirely yours.
+**Disclaimer**: This tool is not affiliated with OpenAI. Using automated tools to access ChatGPT APIs may violate their Terms of Service.

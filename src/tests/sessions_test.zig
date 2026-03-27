@@ -58,9 +58,8 @@ fn writeLargeRolloutFile(
     var file = try dir.createFile(sub_path, .{});
     defer file.close();
 
-    var write_buffer: [4096]u8 = undefined;
-    var file_writer = file.writer(&write_buffer);
-    const writer = &file_writer.interface;
+    var bw = std.io.bufferedWriter(file.writer());
+    const writer = bw.writer().any();
     var written: usize = 0;
     const filler_len = 900 * 1024;
     const filler = try allocator.alloc(u8, filler_len);
@@ -74,7 +73,7 @@ fn writeLargeRolloutFile(
     }
     try writer.writeAll(trailer_line);
     try writer.writeByte('\n');
-    try writer.flush();
+    try bw.flush();
 }
 
 fn writeOversizedMalformedLineThenTrailer(
@@ -87,9 +86,8 @@ fn writeOversizedMalformedLineThenTrailer(
     var file = try dir.createFile(sub_path, .{});
     defer file.close();
 
-    var write_buffer: [4096]u8 = undefined;
-    var file_writer = file.writer(&write_buffer);
-    const writer = &file_writer.interface;
+    var bw = std.io.bufferedWriter(file.writer());
+    const writer = bw.writer().any();
     const chunk_len = 900 * 1024;
     const chunk = try allocator.alloc(u8, chunk_len);
     defer allocator.free(chunk);
@@ -104,7 +102,7 @@ fn writeOversizedMalformedLineThenTrailer(
     try writer.writeByte('\n');
     try writer.writeAll(trailer_line);
     try writer.writeByte('\n');
-    try writer.flush();
+    try bw.flush();
 }
 
 test "parse token_count usage" {

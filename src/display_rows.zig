@@ -40,10 +40,10 @@ pub fn buildDisplayRows(
 
     std.sort.insertion(usize, ordered, SortContext{ .reg = reg }, lessThanByDisplayOrder);
 
-    var row_list = std.ArrayList(DisplayRow).empty;
+    var row_list = std.ArrayListUnmanaged(DisplayRow){};
     errdefer for (row_list.items) |*row| row.deinit(allocator);
     defer row_list.deinit(allocator);
-    var selectable = std.ArrayList(usize).empty;
+    var selectable = std.ArrayListUnmanaged(usize){};
     defer selectable.deinit(allocator);
 
     var i: usize = 0;
